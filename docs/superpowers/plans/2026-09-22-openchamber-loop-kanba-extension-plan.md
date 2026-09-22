@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** This is an unexecuted plan. The repository intentionally has no package, source files, generated IIFEs, or runnable tests until E0 is implemented; every command below is future-stage acceptance criteria, not evidence from this document-only change.
+**Execution status:** E0 completed and verified on 2026-09-22. E1-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed.
 
 ## Global Constraints
 
@@ -175,7 +175,7 @@ The adapter must construct SDK `StartSessionRequest` values and return the pinne
 
 **Produces:** A pinned, testable extension manifest; `bun run check` and `bun run build` commands used by every later task.
 
-- [ ] **Step 1: Write the failing manifest contract test.**
+- [x] **Step 1: Write the failing manifest contract test.**
 
 ```ts
 // tests/manifest.test.ts
@@ -219,13 +219,13 @@ test("is accepted by the official OpenChamber manifest parser", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test before adding the manifest.**
+- [x] **Step 2: Run the test before adding the manifest.**
 
 Run: `bun test tests/manifest.test.ts`
 
 Expected: FAIL because `package.json` is absent or has no `openchamber` manifest.
 
-- [ ] **Step 3: Create the minimal manifest and strict TypeScript configuration.**
+- [x] **Step 3: Create the minimal manifest and strict TypeScript configuration.**
 
 ```json
 {
@@ -275,13 +275,13 @@ Expected: FAIL because `package.json` is absent or has no `openchamber` manifest
 }
 ```
 
-- [ ] **Step 4: Install the pinned dependencies and generate `bun.lock`.**
+- [x] **Step 4: Install the pinned dependencies and generate `bun.lock`.**
 
 Run: `bun install`
 
 Expected: `bun.lock` exists and `@openchamber/sdk` resolves to `1.24.2`.
 
-- [ ] **Step 5: Make the manifest test pass and record the SDK public API baseline.**
+- [x] **Step 5: Make the manifest test pass and record the SDK public API baseline.**
 
 Run: `bun test tests/manifest.test.ts && bunx tsc --noEmit`
 
