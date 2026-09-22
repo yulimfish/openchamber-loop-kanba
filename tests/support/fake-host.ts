@@ -87,10 +87,14 @@ type FakeSlot = { name: string };
 export const createFakeUiKit = (): UiKit & {
   mountCount: number;
   visibleText(name: string): string | undefined;
+  click(name: string): void;
   select(name: string, id: string): void;
+  type(name: string, value: string): void;
 } => {
   const text = new Map<string, string>();
+  const buttons = new Map<string, () => void>();
   const selects = new Map<string, (id: string) => void>();
+  const textFields = new Map<string, (value: string) => void>();
   let mountCount = 0;
   const slot = (value: UiSlot) => value as FakeSlot;
   const handle = <T extends object>(value: UiSlot, initial: T): Handle<T> => {
@@ -111,7 +115,9 @@ export const createFakeUiKit = (): UiKit & {
       return mountCount;
     },
     visibleText: (name) => text.get(name),
+    click: (name) => buttons.get(name)?.(),
     select: (name, id) => selects.get(name)?.(id),
+    type: (name, value) => textFields.get(name)?.(value),
     mountRoot: (name) => {
       mountCount += 1;
       return { name };
@@ -120,7 +126,10 @@ export const createFakeUiKit = (): UiKit & {
     setHidden: () => undefined,
     mountBadge: (value, props: BadgeProps) => handle(value, props),
     mountBanner: (value, props: BannerProps) => handle(value, props),
-    mountButton: (value, props: ButtonProps) => handle(value, props),
+    mountButton: (value, props: ButtonProps) => {
+      buttons.set(slot(value).name, props.onClick);
+      return handle(value, props);
+    },
     mountEmpty: (value, props: EmptyProps) => handle(value, props),
     mountList: (value, props: ListProps) => handle(value, props),
     mountSelect: (value, props: SelectProps) => {
@@ -128,7 +137,10 @@ export const createFakeUiKit = (): UiKit & {
       return handle(value, props);
     },
     mountText: (value, props: TextProps) => handle(value, props),
-    mountTextField: (value, props: TextFieldProps) => handle(value, props),
+    mountTextField: (value, props: TextFieldProps) => {
+      textFields.set(slot(value).name, props.onChange);
+      return handle(value, props);
+    },
   };
 };
 

@@ -24,6 +24,7 @@ export interface PageSurfaceState {
   limit: number;
   cards: SurfaceCard[];
   empty: boolean;
+  error?: string | null;
   onSelectProject?: (projectId: string) => void;
   onNewCard?: (draft: PageDraft) => void;
   onOpenSession?: (sessionId: string) => void;
@@ -69,7 +70,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
     .map((card) => ({ id: card.id, title: card.title }));
   const render = () => {
     if (!mounted) return;
-    empty?.update({ title: label("noProject") });
+    empty?.update({ title: state.error ?? label("noProject") });
     ui.setHidden(emptySlot as UiSlot, !state.empty);
     project?.update({
       label: label("project"),

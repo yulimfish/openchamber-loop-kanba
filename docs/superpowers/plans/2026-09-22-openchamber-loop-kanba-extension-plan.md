@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0-E2 completed and verified on 2026-09-22. E3-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
+**Execution status:** E0-E3 completed and verified on 2026-09-22. E4-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
 
 ## Global Constraints
 
@@ -518,7 +518,7 @@ The page bootstrap must own `setActiveProject(projectId)`: increment a `projectG
 
 **Produces:** Cards survive reload, are ordered per project, and only a user action can move them between the four columns.
 
-- [ ] **Step 1: Write failing persistence and transition tests.**
+- [x] **Step 1: Write failing persistence and transition tests.**
 
 ```ts
 // tests/board-store.test.ts
@@ -590,21 +590,23 @@ test("does not claim a card was saved when the single-key Host write fails", asy
 });
 ```
 
-- [ ] **Step 2: Run the storage tests before implementation.**
+- [x] **Step 2: Run the storage tests before implementation.**
 
 Run: `bun test tests/board-store.test.ts`
 
 Expected: FAIL because schema, store, and memory storage do not exist.
 
-- [ ] **Step 3: Implement schema validation and single-key store writes.**
+- [x] **Step 3: Implement schema validation and single-key store writes.**
 
 `createBoardStore(storage)` must validate the literal schema name, non-empty IDs/titles/prompts, title length <= 200, prompt length <= 16,000, the four statuses, per-project ownership, monotonic `position`, and the UTF-8 byte size of every serialized value before writing. `createCard()` itself generates a UUID, so `cardKey(cardId)` is always below the 128-character key limit; `projectKey(projectId)` awaits a SHA-256 hex digest. Export `assertStorageValueSize(value: JsonValue)` so the 64 KiB byte-limit guard is directly tested. A card create/edit/move writes exactly its `cardKey(cardId)`; project settings write exactly `await projectKey(projectId)`. `beginSessionStart()` writes the pending fields in one card write. `completeSessionStart()` must use one subsequent card write to set session ID, linked state, worktree references, target status, and cleared pending fields together; it must never call `moveCard()` afterward. `recordSkippedSessionStart()` likewise writes preserved worktree data, `todo`, and cleared pending together. If either result write fails, the prior persisted pending record remains unchanged, blocking another Start until the user has inspected the native project and explicitly cleared pending. `loadBoard(projectId)` derives the board by awaiting `storage.keys()`, loading card keys, filtering their `projectId`, and sorting by `status`, `position`, then `id`. A validation failure or failed Host write must leave persisted storage untouched and surface an error rather than claiming persistence. `moveCard(cardId, nextStatus, cause)` must accept only `cause === "user"`, record an ISO timestamp, and reject `"session-summary"`, `"activity"`, and `"outcome"` causes with the exact test message. The rail never writes board data; no v1 behavior depends on cross-key atomicity, a global card index, or an unavailable compare-and-swap operation.
 
-- [ ] **Step 4: Verify reload, ordering, and strict typing.**
+- [x] **Step 4: Verify reload, ordering, and strict typing.**
 
 Run: `bun test tests/board-store.test.ts && bun run check`
 
 Expected: PASS. The oversized serialized-value test proves no storage value crosses the 64 KiB Host limit; cards contain metadata only and never transcript-like content.
+
+Completed on 2026-09-22: `bun test tests/board-store.test.ts`, `bun run check`, `bun run build`, and `git diff --check` passed. Coverage includes project key hashing, UUID card validation, reload/ownership sorting, explicit-only transitions, UTF-8 64 KiB bounds, failed writes preserving durable state, and same-store concurrent position allocation.
 
 ## E4: Create and Open Main/Review Worktree Sessions
 

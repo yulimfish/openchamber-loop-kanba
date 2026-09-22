@@ -3,6 +3,7 @@ import type { GuestProjectsSnapshot, GuestSessionsSnapshot, HostReadyContext } f
 
 import { bootstrapPanel } from "../panel/main";
 import { bootstrapPage } from "../panel/page";
+import { createBoardStore } from "../src/board-store";
 import { createHostAdapter } from "../src/host-adapter";
 import { createPanelSurface } from "../src/render-panel";
 import { createPageSurface } from "../src/render-page";
@@ -37,6 +38,38 @@ test("page bootstrap reapplies locale without remounting its surface", async () 
   expect(page.getDraft().title).toBe("Keep this draft");
   expect(ui.visibleText("newCard")).toBe("新建卡片");
 
+  dispose();
+});
+
+test("page loads its persisted board and creates a card from the draft", async () => {
+  const host = createFakeHost();
+  const store = createBoardStore(host.storage);
+  await store.createProject("project-a", 2);
+  await store.createCard("project-a", { title: "Stored card", prompt: "Stored prompt" });
+  const ui = createFakeUiKit();
+  const page = createPageSurface(ui);
+  const dispose = await bootstrapPage(createHostAdapter(host.client), page);
+
+  host.emitReady({ locale: "en" } as HostReadyContext);
+  host.emitProjects({
+    kind: "projects",
+    state: "ready",
+    projects: [{ id: "project-a", name: "A", directory: "/a" }],
+  });
+  await Bun.sleep(0);
+  await Bun.sleep(0);
+
+  expect(ui.visibleText("todoCards")).toBe("Stored card");
+  expect(ui.visibleText("active")).toBe("Active: 0/2 Limit");
+  ui.type("title", "New card");
+  ui.type("prompt", "New prompt");
+  ui.click("newCard");
+  await Bun.sleep(0);
+  await Bun.sleep(0);
+
+  expect(ui.visibleText("todoCards")).toBe("Stored card|New card");
+  expect(page.getDraft()).toEqual({ title: "", prompt: "" });
+  expect((await store.loadBoard("project-a")).todo.map(({ title }) => title)).toEqual(["Stored card", "New card"]);
   dispose();
 });
 
@@ -94,6 +127,9 @@ test("rail bootstrap applies the Host ready theme", async () => {
 
 test("page ignores a disposed project's delayed session snapshot during rapid switching", async () => {
   const host = createFakeHost();
+  const store = createBoardStore(host.storage);
+  await store.createProject("project-a", 1);
+  await store.createCard("project-a", { title: "Stored card", prompt: "P" });
   const ui = createFakeUiKit();
   const page = createPageSurface(ui);
   const dispose = await bootstrapPage(createHostAdapter(host.client), page);
@@ -126,7 +162,7 @@ test("page ignores a disposed project's delayed session snapshot during rapid sw
   host.emitSessions("project-a", finalSessions);
   host.emitStaleSessions("project-a", oldSessions);
 
-  expect(ui.visibleText("todoCards")).toBe("Final card");
+  expect(ui.visibleText("todoCards")).toBe("Stored card");
   expect(host.peakWorkspaceSubscriptionCount()).toBeLessThanOrEqual(2);
   dispose();
 });
