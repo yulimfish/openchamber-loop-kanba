@@ -11,6 +11,7 @@ import {
 } from "@openchamber/sdk";
 
 import type { HostClientPort } from "../../src/host-adapter";
+import type { BoardCard } from "../../src/schema";
 import type { UiKit, UiSlot } from "../../src/render-panel";
 import type {
   BadgeProps,
@@ -54,10 +55,12 @@ const emptySessions = (projectId: string): GuestSessionsSnapshot => ({
 export const createMemoryStorage = () => {
   const values = new Map<string, JsonValue>();
   let nextSetError: Error | undefined;
+  let setCalls = 0;
 
   return {
     get: async (key: string) => values.get(key),
     set: async (key: string, value: JsonValue) => {
+      setCalls += 1;
       if (nextSetError) {
         const error = nextSetError;
         nextSetError = undefined;
@@ -72,27 +75,45 @@ export const createMemoryStorage = () => {
     failNextSet: (error: Error) => {
       nextSetError = error;
     },
+    setCount: () => setCalls,
   };
 };
 
-export const createUnsafeBoardStore = <T extends { id: string }>(card: T) => ({
-  getCard: async (cardId: string) => {
-    if (cardId !== card.id) throw new Error("Card not found");
-    return card;
-  },
-});
+export const createUnsafeBoardStore = <T extends BoardCard>(card: T) => {
+  const unreachable = async (): Promise<never> => {
+    throw new Error("Unexpected store access before validation");
+  };
+  return {
+    getCard: async (cardId: string) => {
+      if (cardId !== card.id) throw new Error("Card not found");
+      return card;
+    },
+    getProject: unreachable,
+    loadBoard: unreachable,
+    beginSessionStart: unreachable,
+    completeSessionStart: unreachable,
+    recordSkippedSessionStart: unreachable,
+    clearPendingStart: unreachable,
+  };
+};
 
 type FakeSlot = { name: string };
 
 export const createFakeUiKit = (): UiKit & {
   mountCount: number;
   visibleText(name: string): string | undefined;
+  isDisabled(name: string): boolean | undefined;
+  isHidden(name: string): boolean | undefined;
   click(name: string): void;
   select(name: string, id: string): void;
+  selectCard(id: string): void;
   type(name: string, value: string): void;
 } => {
   const text = new Map<string, string>();
+  const disabled = new Map<string, boolean>();
+  const hidden = new Map<string, boolean>();
   const buttons = new Map<string, () => void>();
+  const listSelects = new Map<string, (id: string) => void>();
   const selects = new Map<string, (id: string) => void>();
   const textFields = new Map<string, (value: string) => void>();
   let mountCount = 0;
@@ -103,6 +124,7 @@ export const createFakeUiKit = (): UiKit & {
       Object.assign(initial, next);
       if (props.label !== undefined) text.set(slot(value).name, props.label);
       if (props.text !== undefined) text.set(slot(value).name, props.text);
+      if ((props as { title?: unknown }).title !== undefined) text.set(slot(value).name, String((props as { title?: unknown }).title));
       if (props.items !== undefined) text.set(slot(value).name, props.items.map((item) => item.title).join("|"));
     };
     update(initial);
@@ -115,23 +137,40 @@ export const createFakeUiKit = (): UiKit & {
       return mountCount;
     },
     visibleText: (name) => text.get(name),
+    isDisabled: (name) => disabled.get(name),
+    isHidden: (name) => hidden.get(name),
     click: (name) => buttons.get(name)?.(),
     select: (name, id) => selects.get(name)?.(id),
+    selectCard: (id) => listSelects.forEach((onSelect) => onSelect(id)),
     type: (name, value) => textFields.get(name)?.(value),
     mountRoot: (name) => {
       mountCount += 1;
       return { name };
     },
     createSlot: (_parent, name) => ({ name }),
-    setHidden: () => undefined,
+    setHidden: (value, isHidden) => {
+      hidden.set(slot(value).name, isHidden);
+    },
     mountBadge: (value, props: BadgeProps) => handle(value, props),
     mountBanner: (value, props: BannerProps) => handle(value, props),
     mountButton: (value, props: ButtonProps) => {
       buttons.set(slot(value).name, props.onClick);
-      return handle(value, props);
+      const handleRef = handle(value, props);
+      disabled.set(slot(value).name, props.disabled ?? false);
+      return {
+        update: (next: Partial<ButtonProps>) => {
+          if (next.disabled !== undefined) disabled.set(slot(value).name, next.disabled);
+          if (next.onClick !== undefined) buttons.set(slot(value).name, next.onClick);
+          handleRef.update(next);
+        },
+        dispose: handleRef.dispose,
+      };
     },
     mountEmpty: (value, props: EmptyProps) => handle(value, props),
-    mountList: (value, props: ListProps) => handle(value, props),
+    mountList: (value, props: ListProps) => {
+      listSelects.set(slot(value).name, props.onSelect);
+      return handle(value, props);
+    },
     mountSelect: (value, props: SelectProps) => {
       selects.set(slot(value).name, props.onChange);
       return handle(value, props);
@@ -199,10 +238,12 @@ export const createFakeHost = (options: FakeHostOptions = {}) => {
 
   const openedSessionIds: string[] = [];
   const startRequests: StartSessionRequest[] = [];
+  const sessionLifecycleEvents: Array<{ sessionId: string; phase: string }> = [];
   const fake = {
     client: undefined as unknown as HostClientPort,
     openedSessionIds,
     startRequests,
+    sessionLifecycleEvents,
     disposed: false,
     storage,
     activeSubscriptionCount: () => subscriptions.size,
@@ -236,6 +277,9 @@ export const createFakeHost = (options: FakeHostOptions = {}) => {
     },
     emitStaleSessions: (projectId: string, snapshot: GuestSessionsSnapshot) => {
       retiredSessionListeners.get(projectId)?.forEach((listener) => listener(snapshot));
+    },
+    emitSessionLifecycle: (event: { sessionId: string; phase: string }) => {
+      sessionLifecycleEvents.push(event);
     },
     releaseDeferredWorktreeRegistration: () => releaseDeferredWorktreeRegistration?.(),
   };

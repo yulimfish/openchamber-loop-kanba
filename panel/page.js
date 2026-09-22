@@ -1070,271 +1070,6 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       }
     };
   };
-  // src/schema.ts
-  var BOARD_SCHEMA = "openchamber-loop-kanba/v1";
-  var CARD_KEY_PREFIX = `${BOARD_SCHEMA}/card/`;
-  var PROJECT_KEY_PREFIX = `${BOARD_SCHEMA}/project/`;
-  var textEncoder = new TextEncoder;
-  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
-  var isNullableString = (value) => value === null || isNonEmptyString(value);
-  var isNullableBoolean = (value) => value === null || typeof value === "boolean";
-  var isCanonicalUuidV4 = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-  var isTimestamp = (value) => isNonEmptyString(value) && !Number.isNaN(Date.parse(value));
-  var isCardStatus = (value) => value === "todo" || value === "in_progress" || value === "needs_review" || value === "done";
-  function assertBoardProject(value) {
-    if (!isRecord(value) || value.schema !== BOARD_SCHEMA || !isNonEmptyString(value.projectId) || typeof value.concurrencyLimit !== "number" || !Number.isInteger(value.concurrencyLimit) || value.concurrencyLimit < 1 || typeof value.version !== "number" || !Number.isInteger(value.version) || value.version < 1) {
-      throw new Error("Invalid board project storage value");
-    }
-  }
-  function assertBoardCard(value) {
-    if (!isRecord(value) || value.schema !== BOARD_SCHEMA || !isCanonicalUuidV4(value.id) || !isNonEmptyString(value.projectId) || !isNonEmptyString(value.title) || value.title.length > 200 || !isNonEmptyString(value.prompt) || value.prompt.length > 16000 || !isCardStatus(value.status) || typeof value.position !== "number" || !Number.isInteger(value.position) || value.position < 0 || !isNullableString(value.worktreeDirectory) || !isNullableString(value.worktreeBranch) || !isNullableString(value.mainSessionId) || !isNullableBoolean(value.mainSessionLinked) || !isNullableString(value.reviewSessionId) || !isNullableBoolean(value.reviewSessionLinked) || value.pendingStartRole !== null && value.pendingStartRole !== "main" && value.pendingStartRole !== "review" || !isNullableString(value.pendingRequestId) || value.pendingStartedAt !== null && !isTimestamp(value.pendingStartedAt) || !isTimestamp(value.createdAt) || !isTimestamp(value.updatedAt) || value.pendingStartRole === null && (value.pendingRequestId !== null || value.pendingStartedAt !== null) || value.pendingStartRole !== null && (value.pendingRequestId === null || value.pendingStartedAt === null)) {
-      throw new Error("Invalid board card storage value");
-    }
-  }
-  var cardKey = (cardId) => `${CARD_KEY_PREFIX}${cardId}`;
-  var projectKey = async (projectId) => {
-    const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(projectId));
-    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `${PROJECT_KEY_PREFIX}${hex}`;
-  };
-
-  // src/board-store.ts
-  var MAX_STORAGE_VALUE_BYTES = 64 * 1024;
-  var textEncoder2 = new TextEncoder;
-  var statuses = ["todo", "in_progress", "needs_review", "done"];
-  var assertStorageValueSize = (value) => {
-    if (textEncoder2.encode(JSON.stringify(value)).byteLength > MAX_STORAGE_VALUE_BYTES) {
-      throw new Error("Storage value exceeds 64 KiB");
-    }
-  };
-  var assertNonEmpty = (value, label) => {
-    if (!value.trim())
-      throw new Error(`${label} must not be empty`);
-  };
-  var assertCardInput = ({ title, prompt }) => {
-    assertNonEmpty(title, "Card title");
-    assertNonEmpty(prompt, "Card prompt");
-    if (title.length > 200)
-      throw new Error("Card title exceeds 200 characters");
-    if (prompt.length > 16000)
-      throw new Error("Card prompt exceeds 16000 characters");
-  };
-  var emptyBoard = () => ({ todo: [], in_progress: [], needs_review: [], done: [] });
-  var createBoardStore = (storage) => {
-    const projectWriteQueues = new Map;
-    const enqueueProjectWrite = (projectId, operation) => {
-      const previous = projectWriteQueues.get(projectId) ?? Promise.resolve();
-      const result = previous.then(operation, operation);
-      const queue = result.then(() => {
-        return;
-      }, () => {
-        return;
-      });
-      projectWriteQueues.set(projectId, queue);
-      queue.finally(() => {
-        if (projectWriteQueues.get(projectId) === queue)
-          projectWriteQueues.delete(projectId);
-      });
-      return result;
-    };
-    const getCard = async (cardId) => {
-      assertNonEmpty(cardId, "Card ID");
-      const value = await storage.get(cardKey(cardId));
-      assertBoardCard(value);
-      if (value.id !== cardId)
-        throw new Error("Card storage key does not match card ID");
-      return value;
-    };
-    const loadBoard = async (projectId) => {
-      assertNonEmpty(projectId, "Project ID");
-      const board = emptyBoard();
-      const keys = await storage.keys();
-      for (const key of keys) {
-        if (!key.startsWith(CARD_KEY_PREFIX))
-          continue;
-        const value = await storage.get(key);
-        assertBoardCard(value);
-        if (key !== cardKey(value.id))
-          throw new Error("Card storage key does not match card ID");
-        if (value.projectId === projectId)
-          board[value.status].push(value);
-      }
-      for (const status of statuses) {
-        board[status].sort((left, right) => left.position - right.position || left.id.localeCompare(right.id));
-        for (let index = 1;index < board[status].length; index += 1) {
-          if (board[status][index - 1].position >= board[status][index].position) {
-            throw new Error("Card positions must be monotonic within a column");
-          }
-        }
-      }
-      return board;
-    };
-    const nextPosition = async (projectId, status) => {
-      const cards = (await loadBoard(projectId))[status];
-      return cards.length === 0 ? 0 : cards[cards.length - 1].position + 1;
-    };
-    const writeCard = async (card) => {
-      assertBoardCard(card);
-      assertStorageValueSize(card);
-      await storage.set(cardKey(card.id), card);
-    };
-    const getProject = async (projectId) => {
-      assertNonEmpty(projectId, "Project ID");
-      const value = await storage.get(await projectKey(projectId));
-      if (value === undefined)
-        return;
-      assertBoardProject(value);
-      if (value.projectId !== projectId)
-        throw new Error("Project storage key does not match project ID");
-      return value;
-    };
-    const createProject = async (projectId, concurrencyLimit) => {
-      assertNonEmpty(projectId, "Project ID");
-      const project = { schema: BOARD_SCHEMA, projectId, concurrencyLimit, version: 1 };
-      assertBoardProject(project);
-      assertStorageValueSize(project);
-      await storage.set(await projectKey(projectId), project);
-      return project;
-    };
-    const createCard = async (projectId, input) => {
-      assertNonEmpty(projectId, "Project ID");
-      assertCardInput(input);
-      return enqueueProjectWrite(projectId, async () => {
-        const project = await getProject(projectId);
-        assertBoardProject(project);
-        const now = new Date().toISOString();
-        const card = {
-          schema: BOARD_SCHEMA,
-          id: crypto.randomUUID(),
-          projectId,
-          title: input.title,
-          prompt: input.prompt,
-          status: "todo",
-          position: await nextPosition(projectId, "todo"),
-          worktreeDirectory: null,
-          worktreeBranch: null,
-          mainSessionId: null,
-          mainSessionLinked: null,
-          reviewSessionId: null,
-          reviewSessionLinked: null,
-          pendingStartRole: null,
-          pendingRequestId: null,
-          pendingStartedAt: null,
-          createdAt: now,
-          updatedAt: now
-        };
-        await writeCard(card);
-        return card;
-      });
-    };
-    const editCard = async (cardId, input) => {
-      assertCardInput(input);
-      const current = await getCard(cardId);
-      const next = { ...current, ...input, updatedAt: new Date().toISOString() };
-      await writeCard(next);
-      return next;
-    };
-    const moveCard = async (cardId, nextStatus, cause) => {
-      if (cause !== "user")
-        throw new Error("Only explicit user actions may move a card");
-      const current = await getCard(cardId);
-      return enqueueProjectWrite(current.projectId, async () => {
-        const persisted = await getCard(cardId);
-        const next = {
-          ...persisted,
-          status: nextStatus,
-          position: persisted.status === nextStatus ? persisted.position : await nextPosition(persisted.projectId, nextStatus),
-          updatedAt: new Date().toISOString()
-        };
-        await writeCard(next);
-        return next;
-      });
-    };
-    const beginSessionStart = async (cardId, input) => {
-      assertNonEmpty(input.requestId, "Start request ID");
-      const current = await getCard(cardId);
-      if (current.pendingStartRole !== null)
-        throw new Error("START_IN_PROGRESS");
-      const next = {
-        ...current,
-        pendingStartRole: input.role,
-        pendingRequestId: input.requestId,
-        pendingStartedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      await writeCard(next);
-      return next;
-    };
-    const completeSessionStart = async (cardId, input) => {
-      assertNonEmpty(input.requestId, "Start request ID");
-      assertNonEmpty(input.sessionId, "Session ID");
-      const current = await getCard(cardId);
-      if (current.pendingStartRole !== input.role || current.pendingRequestId !== input.requestId) {
-        throw new Error("No matching pending session start");
-      }
-      return enqueueProjectWrite(current.projectId, async () => {
-        const persisted = await getCard(cardId);
-        if (persisted.pendingStartRole !== input.role || persisted.pendingRequestId !== input.requestId) {
-          throw new Error("No matching pending session start");
-        }
-        const next = {
-          ...persisted,
-          status: input.targetStatus,
-          position: persisted.status === input.targetStatus ? persisted.position : await nextPosition(persisted.projectId, input.targetStatus),
-          worktreeDirectory: input.directory === undefined ? persisted.worktreeDirectory : input.directory,
-          worktreeBranch: input.branch === undefined ? persisted.worktreeBranch : input.branch,
-          ...input.role === "main" ? { mainSessionId: input.sessionId, mainSessionLinked: input.linked } : { reviewSessionId: input.sessionId, reviewSessionLinked: input.linked },
-          pendingStartRole: null,
-          pendingRequestId: null,
-          pendingStartedAt: null,
-          updatedAt: new Date().toISOString()
-        };
-        await writeCard(next);
-        return next;
-      });
-    };
-    const recordSkippedSessionStart = async (cardId, input) => {
-      assertNonEmpty(input.requestId, "Start request ID");
-      const current = await getCard(cardId);
-      if (current.pendingStartRole !== input.role || current.pendingRequestId !== input.requestId) {
-        throw new Error("No matching pending session start");
-      }
-      return enqueueProjectWrite(current.projectId, async () => {
-        const persisted = await getCard(cardId);
-        if (persisted.pendingStartRole !== input.role || persisted.pendingRequestId !== input.requestId) {
-          throw new Error("No matching pending session start");
-        }
-        const targetStatus = input.role === "main" ? "todo" : "in_progress";
-        const next = {
-          ...persisted,
-          status: targetStatus,
-          position: persisted.status === targetStatus ? persisted.position : await nextPosition(persisted.projectId, targetStatus),
-          worktreeDirectory: input.directory === undefined ? persisted.worktreeDirectory : input.directory,
-          worktreeBranch: input.branch === undefined ? persisted.worktreeBranch : input.branch,
-          pendingStartRole: null,
-          pendingRequestId: null,
-          pendingStartedAt: null,
-          updatedAt: new Date().toISOString()
-        };
-        await writeCard(next);
-        return next;
-      });
-    };
-    return {
-      beginSessionStart,
-      completeSessionStart,
-      createCard,
-      createProject,
-      editCard,
-      getCard,
-      getProject,
-      loadBoard,
-      moveCard,
-      recordSkippedSessionStart
-    };
-  };
-
   // node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
@@ -1496,9 +1231,9 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     "action"
   ]);
   var asWireRecord = (data) => Object(data) === data ? data : null;
-  var isNonEmptyString2 = (value) => String(value) === value && value.length > 0;
+  var isNonEmptyString = (value) => String(value) === value && value.length > 0;
   var readResultMessage = (wire) => {
-    if (!isNonEmptyString2(wire.id))
+    if (!isNonEmptyString(wire.id))
       return null;
     if (wire.ok === true) {
       const message = {
@@ -1513,7 +1248,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       }
       return message;
     }
-    if (wire.ok === false && isNonEmptyString2(wire.error)) {
+    if (wire.ok === false && isNonEmptyString(wire.error)) {
       return {
         channel: OPENCHAMBER_SDK_CHANNEL,
         v: OPENCHAMBER_SDK_API_VERSION,
@@ -1521,7 +1256,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         id: wire.id,
         ok: false,
         error: wire.error,
-        code: resolveHostRequestErrorCode(isNonEmptyString2(wire.code) ? wire.code : undefined)
+        code: resolveHostRequestErrorCode(isNonEmptyString(wire.code) ? wire.code : undefined)
       };
     }
     return null;
@@ -2181,6 +1916,286 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       }
     };
   };
+  // src/schema.ts
+  var BOARD_SCHEMA = "openchamber-loop-kanba/v1";
+  var CARD_KEY_PREFIX = `${BOARD_SCHEMA}/card/`;
+  var PROJECT_KEY_PREFIX = `${BOARD_SCHEMA}/project/`;
+  var textEncoder = new TextEncoder;
+  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var isNonEmptyString2 = (value) => typeof value === "string" && value.trim().length > 0;
+  var isNullableString = (value) => value === null || isNonEmptyString2(value);
+  var isNullableBoolean = (value) => value === null || typeof value === "boolean";
+  var isCanonicalUuidV4 = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  var isTimestamp = (value) => isNonEmptyString2(value) && !Number.isNaN(Date.parse(value));
+  var isCardStatus = (value) => value === "todo" || value === "in_progress" || value === "needs_review" || value === "done";
+  function assertBoardProject(value) {
+    if (!isRecord(value) || value.schema !== BOARD_SCHEMA || !isNonEmptyString2(value.projectId) || typeof value.concurrencyLimit !== "number" || !Number.isInteger(value.concurrencyLimit) || value.concurrencyLimit < 1 || typeof value.version !== "number" || !Number.isInteger(value.version) || value.version < 1) {
+      throw new Error("Invalid board project storage value");
+    }
+  }
+  function assertBoardCard(value) {
+    if (!isRecord(value) || value.schema !== BOARD_SCHEMA || !isCanonicalUuidV4(value.id) || !isNonEmptyString2(value.projectId) || !isNonEmptyString2(value.title) || value.title.length > 200 || !isNonEmptyString2(value.prompt) || value.prompt.length > 16000 || !isCardStatus(value.status) || typeof value.position !== "number" || !Number.isInteger(value.position) || value.position < 0 || !isNullableString(value.worktreeDirectory) || !isNullableString(value.worktreeBranch) || !isNullableString(value.mainSessionId) || !isNullableBoolean(value.mainSessionLinked) || !isNullableString(value.reviewSessionId) || !isNullableBoolean(value.reviewSessionLinked) || value.pendingStartRole !== null && value.pendingStartRole !== "main" && value.pendingStartRole !== "review" || !isNullableString(value.pendingRequestId) || value.pendingStartedAt !== null && !isTimestamp(value.pendingStartedAt) || !isTimestamp(value.createdAt) || !isTimestamp(value.updatedAt) || value.pendingStartRole === null && (value.pendingRequestId !== null || value.pendingStartedAt !== null) || value.pendingStartRole !== null && (value.pendingRequestId === null || value.pendingStartedAt === null)) {
+      throw new Error("Invalid board card storage value");
+    }
+  }
+  var cardKey = (cardId) => `${CARD_KEY_PREFIX}${cardId}`;
+  var projectKey = async (projectId) => {
+    const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(projectId));
+    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${PROJECT_KEY_PREFIX}${hex}`;
+  };
+
+  // src/board-store.ts
+  var MAX_STORAGE_VALUE_BYTES = 64 * 1024;
+  var textEncoder2 = new TextEncoder;
+  var statuses = ["todo", "in_progress", "needs_review", "done"];
+  var assertStorageValueSize = (value) => {
+    if (textEncoder2.encode(JSON.stringify(value)).byteLength > MAX_STORAGE_VALUE_BYTES) {
+      throw new Error("Storage value exceeds 64 KiB");
+    }
+  };
+  var assertNonEmpty = (value, label) => {
+    if (!value.trim())
+      throw new Error(`${label} must not be empty`);
+  };
+  var assertCardInput = ({ title, prompt }) => {
+    assertNonEmpty(title, "Card title");
+    assertNonEmpty(prompt, "Card prompt");
+    if (title.length > 200)
+      throw new Error("Card title exceeds 200 characters");
+    if (prompt.length > 16000)
+      throw new Error("Card prompt exceeds 16000 characters");
+  };
+  var emptyBoard = () => ({ todo: [], in_progress: [], needs_review: [], done: [] });
+  var createBoardStore = (storage) => {
+    const projectWriteQueues = new Map;
+    const enqueueProjectWrite = (projectId, operation) => {
+      const previous = projectWriteQueues.get(projectId) ?? Promise.resolve();
+      const result = previous.then(operation, operation);
+      const queue = result.then(() => {
+        return;
+      }, () => {
+        return;
+      });
+      projectWriteQueues.set(projectId, queue);
+      queue.finally(() => {
+        if (projectWriteQueues.get(projectId) === queue)
+          projectWriteQueues.delete(projectId);
+      });
+      return result;
+    };
+    const getCard = async (cardId) => {
+      assertNonEmpty(cardId, "Card ID");
+      const value = await storage.get(cardKey(cardId));
+      assertBoardCard(value);
+      if (value.id !== cardId)
+        throw new Error("Card storage key does not match card ID");
+      return value;
+    };
+    const loadBoard = async (projectId) => {
+      assertNonEmpty(projectId, "Project ID");
+      const board = emptyBoard();
+      const keys = await storage.keys();
+      for (const key of keys) {
+        if (!key.startsWith(CARD_KEY_PREFIX))
+          continue;
+        const value = await storage.get(key);
+        assertBoardCard(value);
+        if (key !== cardKey(value.id))
+          throw new Error("Card storage key does not match card ID");
+        if (value.projectId === projectId)
+          board[value.status].push(value);
+      }
+      for (const status of statuses) {
+        board[status].sort((left, right) => left.position - right.position || left.id.localeCompare(right.id));
+        for (let index = 1;index < board[status].length; index += 1) {
+          if (board[status][index - 1].position >= board[status][index].position) {
+            throw new Error("Card positions must be monotonic within a column");
+          }
+        }
+      }
+      return board;
+    };
+    const nextPosition = async (projectId, status) => {
+      const cards = (await loadBoard(projectId))[status];
+      return cards.length === 0 ? 0 : cards[cards.length - 1].position + 1;
+    };
+    const writeCard = async (card) => {
+      assertBoardCard(card);
+      assertStorageValueSize(card);
+      await storage.set(cardKey(card.id), card);
+    };
+    const getProject = async (projectId) => {
+      assertNonEmpty(projectId, "Project ID");
+      const value = await storage.get(await projectKey(projectId));
+      if (value === undefined)
+        return;
+      assertBoardProject(value);
+      if (value.projectId !== projectId)
+        throw new Error("Project storage key does not match project ID");
+      return value;
+    };
+    const createProject = async (projectId, concurrencyLimit) => {
+      assertNonEmpty(projectId, "Project ID");
+      const project = { schema: BOARD_SCHEMA, projectId, concurrencyLimit, version: 1 };
+      assertBoardProject(project);
+      assertStorageValueSize(project);
+      await storage.set(await projectKey(projectId), project);
+      return project;
+    };
+    const createCard = async (projectId, input) => {
+      assertNonEmpty(projectId, "Project ID");
+      assertCardInput(input);
+      return enqueueProjectWrite(projectId, async () => {
+        const project = await getProject(projectId);
+        assertBoardProject(project);
+        const now = new Date().toISOString();
+        const card = {
+          schema: BOARD_SCHEMA,
+          id: crypto.randomUUID(),
+          projectId,
+          title: input.title,
+          prompt: input.prompt,
+          status: "todo",
+          position: await nextPosition(projectId, "todo"),
+          worktreeDirectory: null,
+          worktreeBranch: null,
+          mainSessionId: null,
+          mainSessionLinked: null,
+          reviewSessionId: null,
+          reviewSessionLinked: null,
+          pendingStartRole: null,
+          pendingRequestId: null,
+          pendingStartedAt: null,
+          createdAt: now,
+          updatedAt: now
+        };
+        await writeCard(card);
+        return card;
+      });
+    };
+    const editCard = async (cardId, input) => {
+      assertCardInput(input);
+      const current = await getCard(cardId);
+      const next = { ...current, ...input, updatedAt: new Date().toISOString() };
+      await writeCard(next);
+      return next;
+    };
+    const moveCard = async (cardId, nextStatus, cause) => {
+      if (cause !== "user")
+        throw new Error("Only explicit user actions may move a card");
+      const current = await getCard(cardId);
+      return enqueueProjectWrite(current.projectId, async () => {
+        const persisted = await getCard(cardId);
+        const next = {
+          ...persisted,
+          status: nextStatus,
+          position: persisted.status === nextStatus ? persisted.position : await nextPosition(persisted.projectId, nextStatus),
+          updatedAt: new Date().toISOString()
+        };
+        await writeCard(next);
+        return next;
+      });
+    };
+    const beginSessionStart = async (cardId, input) => {
+      assertNonEmpty(input.requestId, "Start request ID");
+      const current = await getCard(cardId);
+      if (current.pendingStartRole !== null)
+        throw new Error("START_IN_PROGRESS");
+      const next = {
+        ...current,
+        pendingStartRole: input.role,
+        pendingRequestId: input.requestId,
+        pendingStartedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await writeCard(next);
+      return next;
+    };
+    const completeSessionStart = async (cardId, input) => {
+      assertNonEmpty(input.requestId, "Start request ID");
+      assertNonEmpty(input.sessionId, "Session ID");
+      const current = await getCard(cardId);
+      if (current.pendingStartRole !== input.role || current.pendingRequestId !== input.requestId) {
+        throw new Error("No matching pending session start");
+      }
+      return enqueueProjectWrite(current.projectId, async () => {
+        const persisted = await getCard(cardId);
+        if (persisted.pendingStartRole !== input.role || persisted.pendingRequestId !== input.requestId) {
+          throw new Error("No matching pending session start");
+        }
+        const next = {
+          ...persisted,
+          status: input.targetStatus,
+          position: persisted.status === input.targetStatus ? persisted.position : await nextPosition(persisted.projectId, input.targetStatus),
+          worktreeDirectory: input.directory === undefined ? persisted.worktreeDirectory : input.directory,
+          worktreeBranch: input.branch === undefined ? persisted.worktreeBranch : input.branch,
+          ...input.role === "main" ? { mainSessionId: input.sessionId, mainSessionLinked: input.linked } : { reviewSessionId: input.sessionId, reviewSessionLinked: input.linked },
+          pendingStartRole: null,
+          pendingRequestId: null,
+          pendingStartedAt: null,
+          updatedAt: new Date().toISOString()
+        };
+        await writeCard(next);
+        return next;
+      });
+    };
+    const recordSkippedSessionStart = async (cardId, input) => {
+      assertNonEmpty(input.requestId, "Start request ID");
+      const current = await getCard(cardId);
+      if (current.pendingStartRole !== input.role || current.pendingRequestId !== input.requestId) {
+        throw new Error("No matching pending session start");
+      }
+      return enqueueProjectWrite(current.projectId, async () => {
+        const persisted = await getCard(cardId);
+        if (persisted.pendingStartRole !== input.role || persisted.pendingRequestId !== input.requestId) {
+          throw new Error("No matching pending session start");
+        }
+        const targetStatus = input.role === "main" ? "todo" : "in_progress";
+        const next = {
+          ...persisted,
+          status: targetStatus,
+          position: persisted.status === targetStatus ? persisted.position : await nextPosition(persisted.projectId, targetStatus),
+          worktreeDirectory: input.directory === undefined ? persisted.worktreeDirectory : input.directory,
+          worktreeBranch: input.branch === undefined ? persisted.worktreeBranch : input.branch,
+          pendingStartRole: null,
+          pendingRequestId: null,
+          pendingStartedAt: null,
+          updatedAt: new Date().toISOString()
+        };
+        await writeCard(next);
+        return next;
+      });
+    };
+    const clearPendingStart = async (cardId) => {
+      const current = await getCard(cardId);
+      if (current.pendingStartRole === null)
+        throw new Error("No pending session start");
+      const next = {
+        ...current,
+        pendingStartRole: null,
+        pendingRequestId: null,
+        pendingStartedAt: null,
+        updatedAt: new Date().toISOString()
+      };
+      await writeCard(next);
+      return next;
+    };
+    return {
+      beginSessionStart,
+      clearPendingStart,
+      completeSessionStart,
+      createCard,
+      createProject,
+      editCard,
+      getCard,
+      getProject,
+      loadBoard,
+      moveCard,
+      recordSkippedSessionStart
+    };
+  };
+
   // src/host-adapter.ts
   var itemData = (projectId, cardId, role) => ({
     schema: "openchamber-loop-kanba/v1",
@@ -2188,6 +2203,18 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     cardId,
     role
   });
+  var hostFailureMessage = (code) => {
+    const messages = {
+      NOT_GRANTED: "OpenChamber permission was not granted.",
+      SESSION_BUSY: "The native session is busy.",
+      NO_SESSION: "The native session is no longer available.",
+      NO_DIRECTORY: "Open a project directory before continuing.",
+      HOST_TIMEOUT: "OpenChamber did not confirm the request in time. Inspect the native project before clearing pending.",
+      DISABLED: "This OpenChamber capability is disabled.",
+      HOST_UNAVAILABLE: "OpenChamber is unavailable."
+    };
+    return messages[code] ?? "OpenChamber rejected the request.";
+  };
   var createHostAdapter = (client = connectHost()) => ({
     storage: client.storage,
     onReady: client.onReady,
@@ -2253,6 +2280,8 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
   var messages = {
     en: {
       active: "Active",
+      adoptSession: "Adopt discovered session",
+      clearPending: "Clear pending after native inspection",
       done: "Done",
       inProgress: "In progress",
       limit: "Limit",
@@ -2264,11 +2293,17 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       prompt: "Prompt",
       queued: "Queued",
       recentCards: "Recent cards",
+      openMain: "Open Main",
+      openReview: "Open Review",
+      startMain: "Start Main",
+      startReview: "Start Review",
       todo: "To do",
       title: "Title"
     },
     "zh-CN": {
       active: "进行中",
+      adoptSession: "认领已发现会话",
+      clearPending: "原生检查后清除待处理",
       done: "已完成",
       inProgress: "处理中",
       limit: "上限",
@@ -2280,6 +2315,10 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       prompt: "任务说明",
       queued: "排队中",
       recentCards: "最近卡片",
+      openMain: "打开 Main",
+      openReview: "打开 Review",
+      startMain: "启动 Main",
+      startReview: "启动 Review",
       todo: "待办",
       title: "标题"
     }
@@ -2301,11 +2340,20 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     let state = initialPageState;
     let draft = { title: "", prompt: "" };
     let emptySlot;
+    let bannerSlot;
     const handles = [];
     let empty;
+    let banner;
     let project;
     let active2;
     let newCard;
+    let startMain;
+    let startReview;
+    let openMain;
+    let openReview;
+    let adoptSession;
+    let clearPending;
+    let selectedCardId = null;
     let title;
     let prompt;
     const columns = new Map;
@@ -2316,6 +2364,10 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         return;
       empty?.update({ title: state.error ?? label("noProject") });
       ui.setHidden(emptySlot, !state.empty);
+      if (banner && bannerSlot) {
+        ui.setHidden(bannerSlot, !state.notice);
+        banner.update({ tone: "warning", title: state.notice ?? "" });
+      }
       project?.update({
         label: label("project"),
         value: state.activeProjectId,
@@ -2323,7 +2375,15 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         placeholder: label("noProject")
       });
       active2?.update({ label: `${label("active")}: ${state.active}/${state.limit} ${label("limit")}` });
-      newCard?.update({ label: label("newCard"), disabled: !state.onNewCard });
+      newCard?.update({ label: label("newCard"), disabled: !state.canStart || !state.onNewCard });
+      const selected = state.cards.find((card) => card.id === selectedCardId);
+      const pending = selected?.pendingStartRole != null;
+      startMain?.update({ label: label("startMain"), disabled: !state.canStart || pending || selected?.status !== "todo" || !state.onStartMain });
+      startReview?.update({ label: label("startReview"), disabled: !state.canStart || pending || selected?.status !== "in_progress" || !state.onStartReview });
+      openMain?.update({ label: label("openMain"), disabled: !selected?.mainSessionId || !state.onOpenMain });
+      openReview?.update({ label: label("openReview"), disabled: !selected?.reviewSessionId || !state.onOpenReview });
+      adoptSession?.update({ label: label("adoptSession"), disabled: !state.canStart || !selected?.pendingStartRole || !state.onAdoptSession });
+      clearPending?.update({ label: label("clearPending"), disabled: !state.canStart || !selected?.pendingStartRole || !state.onClearPending });
       title?.update({ label: label("title") });
       prompt?.update({ label: label("prompt") });
       const names = {
@@ -2345,13 +2405,30 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         mounted = true;
         const root = ui.mountRoot("page");
         emptySlot = ui.createSlot(root, "empty");
+        bannerSlot = ui.createSlot(root, "banner");
         const toolbar = ui.createSlot(root, "toolbar");
         const form = ui.createSlot(root, "draft");
         const board = ui.createSlot(root, "board");
         empty = ui.mountEmpty(emptySlot, { title: "" });
+        banner = ui.mountBanner(bannerSlot, { tone: "warning", title: "" });
+        ui.setHidden(bannerSlot, true);
         project = ui.mountSelect(ui.createSlot(toolbar, "project"), { value: null, options: [], onChange: (projectId) => state.onSelectProject?.(projectId) });
         active2 = ui.mountBadge(ui.createSlot(toolbar, "active"), { label: "" });
         newCard = ui.mountButton(ui.createSlot(toolbar, "newCard"), { label: "", onClick: () => state.onNewCard?.(draft) });
+        startMain = ui.mountButton(ui.createSlot(toolbar, "startMain"), { label: "", onClick: () => selectedCardId && state.onStartMain?.(selectedCardId) });
+        startReview = ui.mountButton(ui.createSlot(toolbar, "startReview"), { label: "", onClick: () => selectedCardId && state.onStartReview?.(selectedCardId) });
+        openMain = ui.mountButton(ui.createSlot(toolbar, "openMain"), { label: "", onClick: () => {
+          const sessionId = state.cards.find((card) => card.id === selectedCardId)?.mainSessionId;
+          if (sessionId)
+            state.onOpenMain?.(sessionId);
+        } });
+        openReview = ui.mountButton(ui.createSlot(toolbar, "openReview"), { label: "", onClick: () => {
+          const sessionId = state.cards.find((card) => card.id === selectedCardId)?.reviewSessionId;
+          if (sessionId)
+            state.onOpenReview?.(sessionId);
+        } });
+        adoptSession = ui.mountButton(ui.createSlot(toolbar, "adoptSession"), { label: "", onClick: () => selectedCardId && state.onAdoptSession?.(selectedCardId) });
+        clearPending = ui.mountButton(ui.createSlot(toolbar, "clearPending"), { label: "", onClick: () => selectedCardId && state.onClearPending?.(selectedCardId) });
         title = ui.mountTextField(ui.createSlot(form, "title"), { value: draft.title, onChange: (value) => {
           draft = { ...draft, title: value };
         } });
@@ -2362,14 +2439,13 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
           const column = ui.createSlot(board, status);
           const heading = ui.mountText(ui.createSlot(column, `${status}Heading`), { text: "" });
           const list = ui.mountList(ui.createSlot(column, `${status}Cards`), { items: [], onSelect: (id) => {
-            const sessionId = state.cards.find((card) => card.id === id)?.sessionId;
-            if (sessionId)
-              state.onOpenSession?.(sessionId);
+            selectedCardId = id;
+            render();
           } });
           columns.set(status, { heading, list });
           handles.push(heading, list);
         }
-        handles.push(empty, project, active2, newCard, title, prompt);
+        handles.push(empty, banner, project, active2, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
         render();
       },
       applyReady: (context) => {
@@ -2393,6 +2469,206 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     };
   };
 
+  // src/session-workflow.ts
+  var requestId = () => crypto.randomUUID();
+  var isDataRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var itemRole = (session, projectId) => {
+    for (const item of session.items) {
+      const data = item.data;
+      if (isDataRecord(data) && data.schema === "openchamber-loop-kanba/v1" && data.projectId === projectId && (data.role === "main" || data.role === "review"))
+        return data.role;
+    }
+    return;
+  };
+  var assertStartPayload = (card, role) => {
+    const text = card.prompt.trim();
+    if (!text)
+      throw new Error("Session text must not be empty");
+    if (text.length > 16000)
+      throw new Error("Session text exceeds 16000 characters");
+    if (card.title.length > 200)
+      throw new Error("Session title exceeds 200 characters");
+    if (card.id.length > 128)
+      throw new Error("Session ID exceeds 128 characters");
+    const data = { schema: "openchamber-loop-kanba/v1", projectId: card.projectId, cardId: card.id, role };
+    if (JSON.stringify(data).length > 16000)
+      throw new Error("Session item data exceeds 16000 characters");
+    return text;
+  };
+  var createSessionWorkflow = (adapter, store, lease) => {
+    const inFlight = new Set;
+    const mainReservations = new Map;
+    const sessionRoles = new Map;
+    const releaseReservation = (projectId, cardId) => {
+      const reservations = mainReservations.get(projectId);
+      if (!reservations)
+        return;
+      reservations.delete(cardId);
+      if (reservations.size === 0)
+        mainReservations.delete(projectId);
+    };
+    const start = async (cardId, role) => {
+      const card = await store.getCard(cardId);
+      const text = assertStartPayload(card, role);
+      if (card.pendingStartRole !== null || role === "main" && (card.status !== "todo" || card.mainSessionId !== null) || role === "review" && (card.status !== "in_progress" || card.reviewSessionId !== null || card.worktreeDirectory === null) || inFlight.has(cardId))
+        throw new Error("START_IN_PROGRESS");
+      inFlight.add(cardId);
+      let reserved = false;
+      try {
+        if (lease) {
+          await lease.ready();
+          if (!lease.isWriter())
+            throw new Error("BOARD_READ_ONLY");
+        }
+        const project = await store.getProject(card.projectId);
+        if (!project)
+          throw new Error("Project not found");
+        const board = await store.loadBoard(card.projectId);
+        const reservations = mainReservations.get(card.projectId) ?? new Set;
+        const occupied = board.in_progress.length + board.todo.filter((item) => item.pendingStartRole === "main").length + reservations.size;
+        if (role === "main" && occupied >= project.concurrencyLimit)
+          throw new Error("PROJECT_CONCURRENCY_LIMIT");
+        if (role === "main") {
+          reservations.add(cardId);
+          mainReservations.set(card.projectId, reservations);
+          reserved = true;
+        }
+        const pendingRequestId = requestId();
+        await store.beginSessionStart(cardId, { role, requestId: pendingRequestId });
+        if (reserved) {
+          releaseReservation(card.projectId, cardId);
+          reserved = false;
+        }
+        const result = role === "main" ? await adapter.startMain({ projectId: card.projectId, cardId: card.id, title: card.title, worktreeName: card.id, prompt: text }) : await adapter.startReview({ projectId: card.projectId, cardId: card.id, title: card.title, directory: card.worktreeDirectory, prompt: text });
+        const directory = result.directory ?? result.worktree?.directory;
+        const branch = result.worktree?.branch;
+        if (result.sessionId === null) {
+          await store.recordSkippedSessionStart(cardId, { role, requestId: pendingRequestId, directory, branch });
+          throw new Error(result.failure || "Session start failed");
+        }
+        await store.completeSessionStart(cardId, {
+          role,
+          requestId: pendingRequestId,
+          sessionId: result.sessionId,
+          linked: result.linked ?? true,
+          directory,
+          branch,
+          targetStatus: role === "main" ? "in_progress" : "needs_review"
+        });
+        sessionRoles.set(result.sessionId, role);
+        const notices = [];
+        if ((result.linked ?? true) === false)
+          notices.push("Session created but extension item was not linked");
+        if (result.sent !== "sent")
+          notices.push(`Session created with status "${result.sent}"; no automatic retry will run`);
+        return notices.join(" ") || undefined;
+      } finally {
+        inFlight.delete(cardId);
+        if (reserved)
+          releaseReservation(card.projectId, cardId);
+      }
+    };
+    const bindSessionLabels = async (projectId, listener) => {
+      const board = await store.loadBoard(projectId);
+      for (const card of [...board.todo, ...board.in_progress, ...board.needs_review, ...board.done]) {
+        if (card.mainSessionId)
+          sessionRoles.set(card.mainSessionId, "main");
+        if (card.reviewSessionId)
+          sessionRoles.set(card.reviewSessionId, "review");
+      }
+      return adapter.onSessions(projectId, (snapshot) => {
+        const labels = snapshot.sessions.flatMap((session) => {
+          const role = sessionRoles.get(session.id) ?? itemRole(session, projectId);
+          return role ? [{ sessionId: session.id, role }] : [];
+        });
+        listener(labels);
+      });
+    };
+    const clearPending = (cardId) => store.clearPendingStart(cardId);
+    const adoptDiscoveredSession = async (cardId) => {
+      const card = await store.getCard(cardId);
+      const role = card.pendingStartRole;
+      const pendingRequestId = card.pendingRequestId;
+      if (!role || !pendingRequestId)
+        throw new Error("No pending session start");
+      const sessions = await adapter.listSessions(card.projectId);
+      const matches = sessions.sessions.filter((session2) => session2.items.some((item) => {
+        const data = item.data;
+        return isDataRecord(data) && data.schema === "openchamber-loop-kanba/v1" && data.projectId === card.projectId && data.cardId === card.id && data.role === role;
+      }));
+      if (matches.length !== 1) {
+        const available = sessions.sessions.map((session2) => session2.id).join(", ") || "none";
+        throw new Error(`No unique discovered session (native sessions: ${available})`);
+      }
+      const session = matches[0];
+      await store.completeSessionStart(cardId, {
+        role,
+        requestId: pendingRequestId,
+        sessionId: session.id,
+        linked: true,
+        directory: session.worktree?.directory ?? session.directory,
+        branch: session.worktree?.branch,
+        targetStatus: role === "main" ? "in_progress" : "needs_review"
+      });
+      sessionRoles.set(session.id, role);
+    };
+    return {
+      startMain: (cardId) => start(cardId, "main"),
+      startReview: (cardId) => start(cardId, "review"),
+      bindSessionLabels,
+      adoptDiscoveredSession,
+      clearPending,
+      open: (sessionId) => adapter.openSession(sessionId)
+    };
+  };
+
+  // src/writer-lease.ts
+  var channelName = "openchamber-loop-kanba/board-writer";
+  var createWriterLease = ({
+    channelFactory = (name) => new BroadcastChannel(name),
+    id = crypto.randomUUID()
+  } = {}) => {
+    const channel = channelFactory(channelName);
+    const candidates = new Set([id]);
+    const changeListeners = new Set;
+    const isWriter = () => [...candidates].sort()[0] === id;
+    let lastWriter = isWriter();
+    const notify = () => {
+      const next = isWriter();
+      if (next === lastWriter)
+        return;
+      lastWriter = next;
+      changeListeners.forEach((listener) => listener());
+    };
+    const announce = () => channel.postMessage({ type: "announce", id });
+    const onMessage = (event) => {
+      const message = event.data;
+      if (!message || typeof message !== "object" || message.type !== "announce" || typeof message.id !== "string")
+        return;
+      if (candidates.has(message.id))
+        return;
+      candidates.add(message.id);
+      if (message.id !== id)
+        announce();
+      notify();
+    };
+    channel.addEventListener("message", onMessage);
+    announce();
+    return {
+      ready: () => new Promise((resolve) => setTimeout(resolve, 0)),
+      isWriter,
+      onChange: (listener) => {
+        changeListeners.add(listener);
+        return () => changeListeners.delete(listener);
+      },
+      dispose: () => {
+        channel.removeEventListener("message", onMessage);
+        changeListeners.clear();
+        channel.close();
+      }
+    };
+  };
+
   // panel/page.ts
   var toCards = (board) => [
     ...board.todo,
@@ -2403,11 +2679,19 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     id: card.id,
     title: card.title,
     status: card.status,
-    sessionId: card.mainSessionId ?? card.reviewSessionId ?? undefined
+    mainSessionId: card.mainSessionId ?? undefined,
+    reviewSessionId: card.reviewSessionId ?? undefined,
+    pendingStartRole: card.pendingStartRole ?? undefined
   }));
-  var errorMessage = (error) => error instanceof Error ? error.message : "Unable to load board";
+  var errorMessage = (error) => {
+    if (error instanceof HostRequestError)
+      return hostFailureMessage(error.code);
+    return error instanceof Error && error.message ? error.message : "Unable to load board";
+  };
   var bootstrapPage = async (host, renderer) => {
     const boardStore = createBoardStore(host.storage);
+    const writerLease = createWriterLease();
+    const workflow = createSessionWorkflow(host, boardStore, writerLease);
     let disposed = false;
     let mounted = false;
     let projects = { kind: "projects", state: "loading", projects: [] };
@@ -2416,6 +2700,8 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     let board;
     let settings;
     let error = null;
+    let canStart = false;
+    let notice = null;
     let activeProjectId = null;
     let projectGeneration = 0;
     const projectDisposers = [];
@@ -2429,9 +2715,16 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         cards: board ? toCards(board) : [],
         empty: !activeProjectId || projects.state !== "ready" || error !== null,
         error,
+        notice,
+        canStart,
         onSelectProject: setActiveProject,
-        onNewCard: board ? (draft) => void createCard(draft) : undefined,
-        onOpenSession: (sessionId) => void host.openSession(sessionId)
+        onNewCard: board && canStart ? (draft) => void createCard(draft) : undefined,
+        onStartMain: board && canStart ? (cardId) => void startSession(cardId, "main") : undefined,
+        onStartReview: board && canStart ? (cardId) => void startSession(cardId, "review") : undefined,
+        onAdoptSession: board && canStart ? (cardId) => void recoverSession(cardId, "adopt") : undefined,
+        onClearPending: board && canStart ? (cardId) => void recoverSession(cardId, "clear") : undefined,
+        onOpenMain: (sessionId) => void host.openSession(sessionId),
+        onOpenReview: (sessionId) => void host.openSession(sessionId)
       };
       renderer.update(next);
     };
@@ -2443,6 +2736,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       board = undefined;
       settings = undefined;
       error = null;
+      notice = null;
       projectDisposers.splice(0).forEach((dispose) => dispose());
       render();
       registration = registration.catch(() => {
@@ -2485,6 +2779,12 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
           return;
         }
         projectDisposers.push(disposeSessions);
+        const disposeLabels = await workflow.bindSessionLabels(projectId, () => render());
+        if (disposed || generation !== projectGeneration) {
+          disposeLabels();
+          return;
+        }
+        projectDisposers.push(disposeLabels);
       });
     }
     async function createCard(draft) {
@@ -2508,6 +2808,52 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         render();
       }
     }
+    async function startSession(cardId, role) {
+      const projectId = activeProjectId;
+      const generation = projectGeneration;
+      if (!projectId)
+        return;
+      try {
+        notice = await (role === "main" ? workflow.startMain(cardId) : workflow.startReview(cardId)) ?? null;
+        const nextBoard = await boardStore.loadBoard(projectId);
+        if (disposed || generation !== projectGeneration)
+          return;
+        board = nextBoard;
+        error = null;
+        render();
+      } catch (nextError) {
+        if (disposed || generation !== projectGeneration)
+          return;
+        error = errorMessage(nextError);
+        notice = null;
+        try {
+          board = await boardStore.loadBoard(projectId);
+        } catch {}
+        if (disposed || generation !== projectGeneration)
+          return;
+        render();
+      }
+    }
+    async function recoverSession(cardId, action) {
+      const projectId = activeProjectId;
+      const generation = projectGeneration;
+      if (!projectId)
+        return;
+      try {
+        await (action === "adopt" ? workflow.adoptDiscoveredSession(cardId) : workflow.clearPending(cardId));
+        const nextBoard = await boardStore.loadBoard(projectId);
+        if (disposed || generation !== projectGeneration)
+          return;
+        board = nextBoard;
+        error = null;
+        render();
+      } catch (nextError) {
+        if (disposed || generation !== projectGeneration)
+          return;
+        error = errorMessage(nextError);
+        render();
+      }
+    }
     const disposeReady = host.onReady((context) => {
       if (typeof document !== "undefined") {
         applyHostReady(context, document.documentElement);
@@ -2521,6 +2867,18 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       render();
     });
     let disposeProjects;
+    const releaseLeaseChange = writerLease.onChange(() => {
+      if (disposed)
+        return;
+      canStart = writerLease.isWriter();
+      render();
+    });
+    writerLease.ready().then(() => {
+      if (disposed)
+        return;
+      canStart = writerLease.isWriter();
+      render();
+    });
     try {
       disposeProjects = await host.onProjects((snapshot) => {
         projects = snapshot;
@@ -2531,19 +2889,23 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       });
       projects = await host.listProjects();
       setActiveProject(projects.projects[0]?.id ?? null);
-    } catch (error2) {
+    } catch (bootstrapError) {
       disposeReady();
+      releaseLeaseChange();
+      writerLease.dispose();
       host.dispose();
-      throw error2;
+      throw bootstrapError;
     }
     return () => {
       if (disposed)
         return;
       disposed = true;
       disposeReady();
+      releaseLeaseChange();
       disposeProjects?.();
       projectDisposers.splice(0).forEach((dispose) => dispose());
       renderer.destroy();
+      writerLease.dispose();
       host.dispose();
     };
   };

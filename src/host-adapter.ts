@@ -79,7 +79,7 @@ export const hostFailureMessage = (code: HostFailureCode): string => {
     SESSION_BUSY: "The native session is busy.",
     NO_SESSION: "The native session is no longer available.",
     NO_DIRECTORY: "Open a project directory before continuing.",
-    HOST_TIMEOUT: "OpenChamber did not confirm the request in time.",
+    HOST_TIMEOUT: "OpenChamber did not confirm the request in time. Inspect the native project before clearing pending.",
     DISABLED: "This OpenChamber capability is disabled.",
     HOST_UNAVAILABLE: "OpenChamber is unavailable.",
   };

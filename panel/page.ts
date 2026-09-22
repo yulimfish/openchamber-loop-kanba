@@ -1,10 +1,14 @@
 import { applyHostReady } from "@openchamber/sdk/ui";
 import type { GuestProjectsSnapshot, GuestSessionsSnapshot, GuestWorktreesSnapshot } from "@openchamber/sdk";
 
+import { HostRequestError } from "@openchamber/sdk";
+
 import { createBoardStore, type Board } from "../src/board-store";
-import { createHostAdapter, type HostAdapter } from "../src/host-adapter";
+import { createHostAdapter, hostFailureMessage, type HostAdapter } from "../src/host-adapter";
 import { createDomUiKit, type SurfaceCard } from "../src/render-panel";
 import { createPageSurface, type PageSurface, type PageSurfaceState } from "../src/render-page";
+import { createSessionWorkflow } from "../src/session-workflow";
+import { createWriterLease } from "../src/writer-lease";
 
 const toCards = (board: Board): SurfaceCard[] => [
   ...board.todo,
@@ -15,14 +19,20 @@ const toCards = (board: Board): SurfaceCard[] => [
   id: card.id,
   title: card.title,
   status: card.status,
-  sessionId: card.mainSessionId ?? card.reviewSessionId ?? undefined,
+  mainSessionId: card.mainSessionId ?? undefined,
+  reviewSessionId: card.reviewSessionId ?? undefined,
+  pendingStartRole: card.pendingStartRole ?? undefined,
 }));
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : "Unable to load board";
+const errorMessage = (error: unknown): string => {
+  if (error instanceof HostRequestError) return hostFailureMessage(error.code);
+  return error instanceof Error && error.message ? error.message : "Unable to load board";
+};
 
 export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) => {
   const boardStore = createBoardStore(host.storage);
+  const writerLease = createWriterLease();
+  const workflow = createSessionWorkflow(host, boardStore, writerLease);
   let disposed = false;
   let mounted = false;
   let projects: GuestProjectsSnapshot = { kind: "projects", state: "loading", projects: [] };
@@ -31,6 +41,8 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
   let board: Board | undefined;
   let settings: { concurrencyLimit: number } | undefined;
   let error: string | null = null;
+  let canStart = false;
+  let notice: string | null = null;
   let activeProjectId: string | null = null;
   let projectGeneration = 0;
   const projectDisposers: Array<() => void> = [];
@@ -45,9 +57,16 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
       cards: board ? toCards(board) : [],
       empty: !activeProjectId || projects.state !== "ready" || error !== null,
       error,
+      notice,
+      canStart,
       onSelectProject: setActiveProject,
-      onNewCard: board ? (draft) => void createCard(draft) : undefined,
-      onOpenSession: (sessionId) => void host.openSession(sessionId),
+      onNewCard: board && canStart ? (draft) => void createCard(draft) : undefined,
+      onStartMain: board && canStart ? (cardId) => void startSession(cardId, "main") : undefined,
+      onStartReview: board && canStart ? (cardId) => void startSession(cardId, "review") : undefined,
+      onAdoptSession: board && canStart ? (cardId) => void recoverSession(cardId, "adopt") : undefined,
+      onClearPending: board && canStart ? (cardId) => void recoverSession(cardId, "clear") : undefined,
+      onOpenMain: (sessionId) => void host.openSession(sessionId),
+      onOpenReview: (sessionId) => void host.openSession(sessionId),
     };
     renderer.update(next);
   };
@@ -60,6 +79,7 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
     board = undefined;
     settings = undefined;
     error = null;
+    notice = null;
     projectDisposers.splice(0).forEach((dispose) => dispose());
     render();
     registration = registration.catch(() => undefined).then(async () => {
@@ -95,6 +115,12 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
         return;
       }
       projectDisposers.push(disposeSessions);
+      const disposeLabels = await workflow.bindSessionLabels(projectId, () => render());
+      if (disposed || generation !== projectGeneration) {
+        disposeLabels();
+        return;
+      }
+      projectDisposers.push(disposeLabels);
     });
   }
 
@@ -117,6 +143,49 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
     }
   }
 
+  async function startSession(cardId: string, role: "main" | "review"): Promise<void> {
+    const projectId = activeProjectId;
+    const generation = projectGeneration;
+    if (!projectId) return;
+    try {
+      notice = await (role === "main" ? workflow.startMain(cardId) : workflow.startReview(cardId)) ?? null;
+      const nextBoard = await boardStore.loadBoard(projectId);
+      if (disposed || generation !== projectGeneration) return;
+      board = nextBoard;
+      error = null;
+      render();
+    } catch (nextError) {
+      if (disposed || generation !== projectGeneration) return;
+      error = errorMessage(nextError);
+      notice = null;
+      try {
+        board = await boardStore.loadBoard(projectId);
+      } catch {
+        // Keep the previous board when the reload itself fails.
+      }
+      if (disposed || generation !== projectGeneration) return;
+      render();
+    }
+  }
+
+  async function recoverSession(cardId: string, action: "adopt" | "clear"): Promise<void> {
+    const projectId = activeProjectId;
+    const generation = projectGeneration;
+    if (!projectId) return;
+    try {
+      await (action === "adopt" ? workflow.adoptDiscoveredSession(cardId) : workflow.clearPending(cardId));
+      const nextBoard = await boardStore.loadBoard(projectId);
+      if (disposed || generation !== projectGeneration) return;
+      board = nextBoard;
+      error = null;
+      render();
+    } catch (nextError) {
+      if (disposed || generation !== projectGeneration) return;
+      error = errorMessage(nextError);
+      render();
+    }
+  }
+
   const disposeReady = host.onReady((context) => {
     if (typeof document !== "undefined") {
       applyHostReady(context, document.documentElement);
@@ -130,6 +199,16 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
     render();
   });
   let disposeProjects: (() => void) | undefined;
+  const releaseLeaseChange = writerLease.onChange(() => {
+    if (disposed) return;
+    canStart = writerLease.isWriter();
+    render();
+  });
+  void writerLease.ready().then(() => {
+    if (disposed) return;
+    canStart = writerLease.isWriter();
+    render();
+  });
 
   try {
     disposeProjects = await host.onProjects((snapshot) => {
@@ -139,19 +218,23 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
     });
     projects = await host.listProjects();
     setActiveProject(projects.projects[0]?.id ?? null);
-  } catch (error) {
+  } catch (bootstrapError) {
     disposeReady();
+    releaseLeaseChange();
+    writerLease.dispose();
     host.dispose();
-    throw error;
+    throw bootstrapError;
   }
 
   return () => {
     if (disposed) return;
     disposed = true;
     disposeReady();
+    releaseLeaseChange();
     disposeProjects?.();
     projectDisposers.splice(0).forEach((dispose) => dispose());
     renderer.destroy();
+    writerLease.dispose();
     host.dispose();
   };
 };

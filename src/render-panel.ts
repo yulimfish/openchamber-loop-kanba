@@ -65,6 +65,8 @@ export const createDomUiKit = (root: Element): UiKit => {
 
 type MessageKey =
   | "active"
+  | "adoptSession"
+  | "clearPending"
   | "done"
   | "inProgress"
   | "limit"
@@ -76,12 +78,18 @@ type MessageKey =
   | "prompt"
   | "queued"
   | "recentCards"
+  | "openMain"
+  | "openReview"
+  | "startMain"
+  | "startReview"
   | "todo"
   | "title";
 
 const messages: Record<"en" | "zh-CN", Record<MessageKey, string>> = {
   en: {
     active: "Active",
+    adoptSession: "Adopt discovered session",
+    clearPending: "Clear pending after native inspection",
     done: "Done",
     inProgress: "In progress",
     limit: "Limit",
@@ -93,11 +101,17 @@ const messages: Record<"en" | "zh-CN", Record<MessageKey, string>> = {
     prompt: "Prompt",
     queued: "Queued",
     recentCards: "Recent cards",
+    openMain: "Open Main",
+    openReview: "Open Review",
+    startMain: "Start Main",
+    startReview: "Start Review",
     todo: "To do",
     title: "Title",
   },
   "zh-CN": {
     active: "进行中",
+    adoptSession: "认领已发现会话",
+    clearPending: "原生检查后清除待处理",
     done: "已完成",
     inProgress: "处理中",
     limit: "上限",
@@ -109,6 +123,10 @@ const messages: Record<"en" | "zh-CN", Record<MessageKey, string>> = {
     prompt: "任务说明",
     queued: "排队中",
     recentCards: "最近卡片",
+    openMain: "打开 Main",
+    openReview: "打开 Review",
+    startMain: "启动 Main",
+    startReview: "启动 Review",
     todo: "待办",
     title: "标题",
   },
@@ -121,7 +139,9 @@ export interface SurfaceCard {
   id: string;
   title: string;
   status: "todo" | "in_progress" | "needs_review" | "done";
-  sessionId?: string;
+  mainSessionId?: string;
+  reviewSessionId?: string;
+  pendingStartRole?: "main" | "review";
 }
 
 export interface PanelSurfaceState {
@@ -201,7 +221,8 @@ export const createPanelSurface = (ui: UiKit): PanelSurface => {
       queuedBadge = ui.mountBadge(ui.createSlot(countsSlot, "queued"), { label: "", tone: "neutral" });
       recentHeading = ui.mountText(ui.createSlot(recentSlot, "recentCardsHeading"), { text: "" });
       recentCards = ui.mountList(ui.createSlot(recentSlot, "recentCardsList"), { items: [], onSelect: (id) => {
-        const sessionId = state.recent.find((card) => card.id === id)?.sessionId;
+        const card = state.recent.find((item) => item.id === id);
+        const sessionId = card?.reviewSessionId ?? card?.mainSessionId;
         if (sessionId) state.onOpenSession?.(sessionId);
       } });
       empty = ui.mountEmpty(emptySlot, { title: "" });

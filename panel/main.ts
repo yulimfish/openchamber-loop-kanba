@@ -8,7 +8,7 @@ const toCards = (snapshot: GuestSessionsSnapshot): SurfaceCard[] => snapshot.ses
   id: session.id,
   title: session.title,
   status: "todo",
-  sessionId: session.id,
+  mainSessionId: session.id,
 }));
 
 export const bootstrapPanel = async (host: HostAdapter, renderer: PanelSurface) => {

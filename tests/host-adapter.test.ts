@@ -79,7 +79,7 @@ test("maps Main and Review inputs to the complete public StartSession requests",
 
 test("uses specific recovery copy only for supported Host failures", () => {
   expect(hostFailureMessage("NOT_GRANTED")).toBe("OpenChamber permission was not granted.");
-  expect(hostFailureMessage("HOST_TIMEOUT")).toBe("OpenChamber did not confirm the request in time.");
+  expect(hostFailureMessage("HOST_TIMEOUT")).toBe("OpenChamber did not confirm the request in time. Inspect the native project before clearing pending.");
   expect(hostFailureMessage("HOST_REJECTED")).toBe("OpenChamber rejected the request.");
 });
 

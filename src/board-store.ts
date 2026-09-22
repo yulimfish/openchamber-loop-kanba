@@ -272,8 +272,23 @@ export const createBoardStore = (storage: BoardStorage) => {
     });
   };
 
+  const clearPendingStart = async (cardId: string): Promise<BoardCard> => {
+    const current = await getCard(cardId);
+    if (current.pendingStartRole === null) throw new Error("No pending session start");
+    const next: BoardCard = {
+      ...current,
+      pendingStartRole: null,
+      pendingRequestId: null,
+      pendingStartedAt: null,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeCard(next);
+    return next;
+  };
+
   return {
     beginSessionStart,
+    clearPendingStart,
     completeSessionStart,
     createCard,
     createProject,
@@ -285,3 +300,5 @@ export const createBoardStore = (storage: BoardStorage) => {
     recordSkippedSessionStart,
   };
 };
+
+export type BoardStore = ReturnType<typeof createBoardStore>;

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0-E3 completed and verified on 2026-09-22. E4-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
+**Execution status:** E0-E4 completed and verified on 2026-09-22. E5-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
 
 ## Global Constraints
 
@@ -500,7 +500,7 @@ Automated verification completed on 2026-09-22: `bun test tests/surface-lifecycl
 
 Manual acceptance in OpenChamber: folder-install the extension, open its rail panel and its Extension page, switch the Host theme, change font/rounding if available, and confirm both surfaces update without clearing an in-progress card draft.
 
-The page bootstrap must own `setActiveProject(projectId)`: increment a `projectGeneration`, dispose the prior project-specific `onWorktrees` and `onSessions` subscriptions before registering replacements, clear stale project view data, then await the two new subscriptions. E4 adds the board-backed `bindSessionLabels` binding once persistent cards and session labels exist. Every callback captures its generation and returns without rendering when it no longer matches. If selection changed while registration awaited, immediately dispose those newly returned callbacks. The rail subscribes to `onDirectory(directory)` and `onProjects`; it maps the current directory to `GuestProject.directory`, displays a Host-style empty state for null/loading/error/unmatched directory, and runs the same generation/dispose-before-subscribe sequence when the match changes. Add fake-Host page rapid-switch (`project-a -> project-b -> project-a`) and rail directory-switch tests with delayed old snapshots; prove only the final project renders and the active workspace-subscription count never exceeds the two subscriptions for one selected project.
+The page bootstrap must own `setActiveProject(projectId)`: increment a `projectGeneration`, dispose the prior project-specific `onWorktrees` and `onSessions` subscriptions before registering replacements, clear stale project view data, then await the two new subscriptions. E4 adds the board-backed `bindSessionLabels` binding once persistent cards and session labels exist. Every callback captures its generation and returns without rendering when it no longer matches. If selection changed while registration awaited, immediately dispose those newly returned callbacks. The rail subscribes to `onDirectory(directory)` and `onProjects`; it maps the current directory to `GuestProject.directory`, displays a Host-style empty state for null/loading/error/unmatched directory, and runs the same generation/dispose-before-subscribe sequence when the match changes. Add fake-Host page rapid-switch (`project-a -> project-b -> project-a`) and rail directory-switch tests with delayed old snapshots; prove only the final project renders and the active workspace-subscription count never exceeds the two subscriptions for one selected project (three once E4's `bindSessionLabels` is added).
 
 ## E3: Persist the Four-Column Board by Project
 
@@ -622,6 +622,12 @@ Completed on 2026-09-22: `bun test tests/board-store.test.ts`, `bun run check`, 
 - Modify: `src/host-adapter.ts`
 - Modify: `src/board-store.ts`
 - Modify: `src/render-page.ts`
+- Modify: `src/render-panel.ts`
+- Modify: `panel/main.ts`
+- Modify: `panel/page.ts`
+- Modify: `tests/support/fake-host.ts`
+- Modify: `tests/surface-lifecycle.test.ts`
+- Modify: `tests/host-adapter.test.ts`
 
 **Consumes:** E1 adapter, E3 store, and the data envelope `{ schema, projectId, cardId, role }`.
 
@@ -629,7 +635,7 @@ Completed on 2026-09-22: `bun test tests/board-store.test.ts`, `bun run check`, 
 
 `createWriterLease()` uses `BroadcastChannel("openchamber-loop-kanba/board-writer")` with a per-page UUID. It waits for peer announcements before enabling mutations; when two pages in the same extension client are present, the lexicographically smaller UUID is writer and the other page is read-only. `reserveMain(projectId, cardId, limit, board)` synchronously measures existing capacity before inserting: persisted pending-Main cards plus existing `in_progress` cards plus other unpersisted reservations. Reject when that pre-insertion count is `>= limit`; otherwise insert this reservation, so the admitted Start consumes one of the available slots without rejecting itself. On successful persistence of the initial pending record, release the in-memory reservation immediately: that persisted pending record is now the sole capacity count. If the pending write fails, release it too. Every later terminal path (successful session link, skipped-result record, timeout/rejection, result-write failure, adoption, or explicit pending clear) must leave no in-memory reservation; the persistent pending or `in_progress` state then supplies the count when applicable. This prevents same-client double Start only; SDK v1 lacks CAS or a server-side lease, so cross-client concurrency is explicitly best-effort. Test two leases and the limit-1/two-card race without a real browser by injecting a fake channel factory.
 
-- [ ] **Step 1: Write failing workflow tests.**
+- [x] **Step 1: Write failing workflow tests.**
 
 ```ts
 // tests/session-workflow.test.ts
@@ -772,13 +778,13 @@ Add these non-optional cases in the same test file:
 6. Complete one Main start successfully, then move that card out of `in_progress`; assert its in-memory reservation was released when pending persisted and the remaining capacity becomes available. Repeat for a `HOST_TIMEOUT`, a result-write failure, and a skipped-result record; assert each has no reservation leak and that only the persisted pending state occupies capacity where applicable. In separate recovery cases, Adopt a uniquely discovered session and invoke `Clear pending after native inspection`; assert both leave the reservation set empty and capacity is supplied only by their resulting persisted state.
 7. Use a valid card whose `projectId` makes `JSON.stringify(data)` exceed 16,000 characters, and separately one whose trimmed prompt exceeds 16,000 characters. For each, assert `startMain()` rejects before reservation/pending mutation, makes zero Host calls and zero storage writes, leaves the reservation set empty, and preserves the card. Repeat both overlong data and overlong trimmed-prompt cases for `startReview()` with the same zero-mutation assertions.
 
-- [ ] **Step 2: Run the workflow tests before implementation.**
+- [x] **Step 2: Run the workflow tests before implementation.**
 
 Run: `bun test tests/session-workflow.test.ts`
 
 Expected: FAIL because the workflow module does not exist.
 
-- [ ] **Step 3: Implement Main and Review request construction.**
+- [x] **Step 3: Implement Main and Review request construction.**
 
 `startMain(cardId)` must reject non-`todo` cards, cards with `mainSessionId !== null` or `pendingStartRole !== null`, blank or trimmed prompts longer than 16,000 characters, titles longer than 200 characters, IDs longer than 128 characters, item data whose `JSON.stringify(data)` length exceeds 16,000 characters, and projects whose current `in_progress` count reaches `BoardProject.concurrencyLimit`. Build the trimmed `text` and exact `{ schema, projectId, cardId, role: "main" }` data object first; all length checks finish before acquiring the writer lease, adding a reservation, or writing pending. An invalid payload rejects with no Host call and no mutation. The full page is the sole writer surface within its extension client; it must hold a page-writer lease before enabling Start, and a second local board page remains read-only. Before its first await after validation it adds `cardId` to a workflow-local card `Set`, measures existing project capacity before inserting this card's reservation, rejects when that count is `>= BoardProject.concurrencyLimit`, and otherwise adds the card to a per-project reservation `Set`. A `finally` after the Host/result branch clears that local card guard; durable pending remains the cross-reload lock. It then writes `pendingStartRole: "main"`, a new request UUID, and `pendingStartedAt` to the card key. If either guard is present or the pending write fails, it must release its reservation, reject with `START_IN_PROGRESS` or the write error, and never call `startSession`; if the pending write succeeds, release the in-memory reservation immediately because that persisted pending record now occupies capacity. This is a same-client guard only; SDK v1 cannot make a cross-client hard concurrency guarantee. It constructs this complete public SDK request:
 
@@ -807,15 +813,19 @@ Every rejected `HostRequestError`, including non-timeout codes, leaves the pendi
 
 `startReview(cardId)` must require `in_progress`, `reviewSessionId === null`, no pending role, and a non-null `worktreeDirectory`; it validates the trimmed text and serialized `{ schema, projectId, cardId, role: "review" }` data against the same limits before pending/reservation mutation, applies the same in-flight/persistent-pending protocol, then calls the full request shape with `worktree: { kind: "existing", directory }` and item-data `role: "review"`. It calls `completeSessionStart()` once with target status `needs_review` only when the result has a non-null review session ID, and persists `reviewSessionLinked` in that same write; non-`sent` status only changes the banner. Neither path chooses model, agent, or variant; the Host uses the user's current selections.
 
-- [ ] **Step 4: Reconcile summary subscriptions without treating them as commands.**
+- [x] **Step 4: Reconcile summary subscriptions without treating them as commands.**
 
 Expose `workflow.bindSessionLabels(projectId, listener): Promise<() => void>`; it awaits `adapter.onSessions(projectId, listener)` only to update visible Main/Review labels. Match persisted `mainSessionId`/`reviewSessionId` first, then extension item data, so a `linked: false` session remains visible and openable after reload. Do not alter `BoardCard.status` inside a subscription callback, and do not subscribe to `onSessionLifecycle` in v1. Add a fake-Host regression case that begins with an `in_progress` card, emits a ready session snapshot containing `{ id: "main-1", activity: "idle", outcome: "completed" }` without item data, then emits `{ sessionId: "main-1", phase: "completed" }`; after both events, assert the stored link remains usable and the card remains `in_progress`. The test must invoke `bindSessionLabels()`, not `assertNoAutomaticTransition()` in isolation.
 
-- [ ] **Step 5: Verify the workflow end-to-end.**
+- [x] **Step 5: Verify the workflow end-to-end.**
 
 Run: `bun test tests/session-workflow.test.ts && bun run check && bun run build`
 
 Expected: PASS.
+
+Completed on 2026-09-22: `bun run check` (66 tests, 169 expects) and `bun run build` passed. Coverage includes exact Main/Review request shapes (Review equals Main except worktree and role), in-flight same-card `START_IN_PROGRESS`, limit-1 reservation with `PROJECT_CONCURRENCY_LIMIT`, pending retained on `HOST_TIMEOUT`/`NOT_GRANTED`/result-write failure with no reservation leak, skipped bootstrap and Review results, unique/zero/multiple-match Adopt (errors list native session IDs) with explicit Clear, overlong prompt (Main and Review) and item data rejected before Host or storage mutation, BroadcastChannel writer-lease election plus peer-change notification, persisted-ID plus item-data session labeling that survives snapshot `outcome` and lifecycle `phase` events without status mutation, separate Main/Review native open actions, read-only Start/New/Adopt/Clear gating via `canStart`, pending-card Start/Review disabling, linked-unsent and non-`sent` warning notices asserted at the workflow source, runtime-timeout recovery actions reachable after board reload, and page bootstrap subscription disposal. Manual acceptance in OpenChamber is deferred to E7.
+
+**Known follow-up (plan gap):** the design workflow's explicit "move card to done" user action has `moveCard(..., "user")` support in `src/board-store.ts` but no page control and no E4-E7 task owns that UI; a follow-up task must add the move control (with its own wireframe confirmation) before E7 Step 4 manual acceptance can pass.
 
 Manual acceptance in OpenChamber: create a card, Start it, confirm a new worktree session appears; choose Move to review after work is ready, confirm the Review session attaches to the same directory; use Open Main/Review session and verify native Chat/Context displays the real details.
 
