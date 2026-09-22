@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0-E1 completed and verified on 2026-09-22. E2-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed.
+**Execution status:** E0-E2 completed and verified on 2026-09-22. E3-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
 
 ## Global Constraints
 
@@ -397,7 +397,7 @@ Expected: PASS; `panel/main.js` and `panel/page.js` exist and contain bundled II
 
 **Produces:** A rail summary and full Extension page that inherit Host context without losing a user draft during a theme/context refresh.
 
-- [ ] **Step 1: Obtain the mandatory layout confirmation before touching UI code.**
+- [x] **Step 1: Obtain the mandatory layout confirmation before touching UI code.**
 
 Present this exact difference and wait for the user's one-line confirmation:
 
@@ -415,7 +415,7 @@ PAGE: project selector | active/limit | new card
 
 Do not create or edit the renderer/HTML files until confirmation arrives.
 
-- [ ] **Step 2: Write failing source-policy tests.**
+- [x] **Step 2: Write failing source-policy tests.**
 
 ```ts
 // tests/ui-policy.test.ts
@@ -469,7 +469,7 @@ test("reapplies ready context without remounting controls or discarding a draft"
 });
 ```
 
-- [ ] **Step 3: Implement the rendering contract.**
+- [x] **Step 3: Implement the rendering contract.**
 
 `createPageSurface(ui)` and the equivalent rail constructor must expose `mount()`, `applyReady(context)`, `update(state)`, and `destroy()`; the page surface also exposes `setDraft()`/`getDraft()` for its local form state. On the first `onReady`, mount the UI kit controls. On subsequent `onReady`, first call `applyHostReady(context, document.documentElement)`, set `document.documentElement.lang = context.locale`, and then call surface `applyReady(context)` and `update(state)` methods; do not replace the root or reset text-field values. `createFakeUiKit()` provides the same narrow mount/text/document-element ports for lifecycle tests without a browser DOM. Add `formatMessage(locale, key)` with complete English and Simplified Chinese labels for every extension-owned visible control; unrecognized locales use English. The rail renderer shows current-project identity, active/review/queued counts, and recent cards only. The page renderer shows the project selector, active/limit summary, New card action, and the four fixed columns. Its session-detail actions call the adapter's `openSession()` rather than rendering unavailable details.
 
@@ -490,15 +490,17 @@ window.addEventListener("beforeunload", () => {
 }, { once: true });
 ```
 
-- [ ] **Step 4: Verify policy and perform a live Host visual check.**
+- [x] **Step 4: Verify policy and perform a live Host visual check.**
 
 Run: `bun test tests/ui-policy.test.ts && bun run check && bun run build`
 
 Expected: PASS.
 
+Automated verification completed on 2026-09-22: `bun test tests/surface-lifecycle.test.ts`, `bun test tests/ui-policy.test.ts`, `bun run check`, `bun run build`, and `git diff --check` passed. The folder-install visual smoke test is deferred to E7, where installation and Host permission checks are consolidated.
+
 Manual acceptance in OpenChamber: folder-install the extension, open its rail panel and its Extension page, switch the Host theme, change font/rounding if available, and confirm both surfaces update without clearing an in-progress card draft.
 
-The page bootstrap must own `setActiveProject(projectId)`: increment a `projectGeneration`, dispose the prior project-specific `onWorktrees`, `onSessions`, and `bindSessionLabels` subscriptions before registering replacements, clear stale project view data, then await the three new subscriptions. Every callback captures its generation and returns without rendering when it no longer matches. If selection changed while registration awaited, immediately dispose those newly returned callbacks. The rail subscribes to `onDirectory(directory)` and `onProjects`; it maps the current directory to `GuestProject.directory`, displays a Host-style empty state for null/loading/error/unmatched directory, and runs the same generation/dispose-before-subscribe sequence when the match changes. Add fake-Host page rapid-switch (`project-a -> project-b -> project-a`) and rail directory-switch tests with delayed old snapshots; prove only the final project renders and the active workspace-subscription count never exceeds the three subscriptions for one selected project.
+The page bootstrap must own `setActiveProject(projectId)`: increment a `projectGeneration`, dispose the prior project-specific `onWorktrees` and `onSessions` subscriptions before registering replacements, clear stale project view data, then await the two new subscriptions. E4 adds the board-backed `bindSessionLabels` binding once persistent cards and session labels exist. Every callback captures its generation and returns without rendering when it no longer matches. If selection changed while registration awaited, immediately dispose those newly returned callbacks. The rail subscribes to `onDirectory(directory)` and `onProjects`; it maps the current directory to `GuestProject.directory`, displays a Host-style empty state for null/loading/error/unmatched directory, and runs the same generation/dispose-before-subscribe sequence when the match changes. Add fake-Host page rapid-switch (`project-a -> project-b -> project-a`) and rail directory-switch tests with delayed old snapshots; prove only the final project renders and the active workspace-subscription count never exceeds the two subscriptions for one selected project.
 
 ## E3: Persist the Four-Column Board by Project
 

@@ -3,7 +3,9 @@ import { afterEach, expect, test } from "bun:test";
 import { createHostAdapter, hostFailureMessage } from "../src/host-adapter";
 import { bootstrapPanel } from "../panel/main";
 import { bootstrapPage } from "../panel/page";
-import { createFakeHost } from "./support/fake-host";
+import { createPanelSurface } from "../src/render-panel";
+import { createPageSurface } from "../src/render-page";
+import { createFakeHost, createFakeUiKit } from "./support/fake-host";
 
 const disposers: Array<() => void> = [];
 
@@ -99,10 +101,10 @@ test("awaits workspace subscriptions and disposes the Host client on surface tea
 test("surface bootstraps release their ready and workspace subscriptions exactly once", async () => {
   const panelHost = createFakeHost();
   const pageHost = createFakeHost();
-  const disposePanel = await bootstrapPanel(createHostAdapter(panelHost.client));
-  const disposePage = await bootstrapPage(createHostAdapter(pageHost.client));
+  const disposePanel = await bootstrapPanel(createHostAdapter(panelHost.client), createPanelSurface(createFakeUiKit()));
+  const disposePage = await bootstrapPage(createHostAdapter(pageHost.client), createPageSurface(createFakeUiKit()));
 
-  expect(panelHost.activeSubscriptionCount()).toBe(2);
+  expect(panelHost.activeSubscriptionCount()).toBe(3);
   expect(pageHost.activeSubscriptionCount()).toBe(2);
 
   disposePanel();
