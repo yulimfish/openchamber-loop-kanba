@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0-E5 completed and verified on 2026-09-22. E6-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
+**Execution status:** E0-E6 completed and verified on 2026-09-22 (E6 outcome: gate held, four upstream APIs absent in `@openchamber/sdk@1.24.2`, E5 unchanged). E7 deterministic checks completed; E7 folder-install and manual workflow acceptance remain pending. Later acceptance commands are not evidence until their corresponding task is completed.
 
 ## Global Constraints
 
@@ -948,7 +948,7 @@ Completed on 2026-09-22: `bun run check` (71 tests, 180 expects) and `bun run bu
 
 **Produces:** Nothing in the v1 release. This is an executable release gate that prevents a misleading partial automation implementation.
 
-- [ ] **Step 1: Confirm all four public APIs from the installed package and official SDK docs.**
+- [x] **Step 1: Confirm all four public APIs from the installed package and official SDK docs.**
 
 Required contracts, without substitutes:
 
@@ -962,15 +962,21 @@ Required contracts, without substitutes:
 
 Expected: every contract is documented and has an SDK type import. If any item is absent, retain E5 unchanged and release only the user-driven version.
 
+Confirmed on 2026-09-22 against installed `@openchamber/sdk@1.24.2` `dist/*.d.ts`: none of `promptSession`, paginated per-session details/resumable events, `openWorktreeReview`, or Session Goal APIs exist. Gate outcome: **retain E5 unchanged and release only the user-driven version.** Steps 2-3 stay closed until a documented SDK release contains all four contracts.
+
 - [ ] **Step 2: Write a new dated design/plan before changing the gate.**
 
 The successor design must define request idempotency, event replay after extension reload, deduplication keys, permission/question escalation, and the exact user-visible recovery path for each Host error. It must never infer success from an idle summary.
+
+**Blocked by Step 1:** the four required APIs are absent in SDK 1.24.2; do not start until a documented release contains all four.
 
 - [ ] **Step 3: Raise the minimum SDK/Host version and replace the static gate only with tests for real capability calls.**
 
 Run: `bun test && bun run check && bun run build`
 
 Expected: PASS with fixtures proving duplicate events create no duplicate session/prompt and an unavailable new capability keeps automatic transitions disabled.
+
+**Blocked by Steps 1-2:** static E5 gate remains in force for the v1 release.
 
 ## E7: Verify Least Privilege, Installation, and Native Handoff
 
@@ -985,7 +991,7 @@ Expected: PASS with fixtures proving duplicate events create no duplicate sessio
 
 **Produces:** Evidence that the extension installs, preserves board data, follows the Host theme, and has no private/elevated integration path.
 
-- [ ] **Step 1: Run all deterministic checks.**
+- [x] **Step 1: Run all deterministic checks.**
 
 Run: `bun test && bun run check && bun run build && git diff --check`
 
@@ -995,11 +1001,15 @@ Run: `git status --short`
 
 Expected: identify every `??` path. For each untracked file that must ship, run `git diff --check --no-index /dev/null <that exact path>`; its exit status is `1` because it is a new file, but it must emit no whitespace diagnostic. This is required because ordinary `git diff --check` does not inspect untracked files.
 
-- [ ] **Step 2: Run the narrow private-integration scan.**
+Completed on 2026-09-22: `bun test` 71 pass / 180 expects; `bun run check` pass; `bun run build` produced `panel/main.js` (88.87 KB) and `panel/page.js` (119.69 KB) classic IIFEs; `git diff --check` silent; `git status --short` empty (no untracked shipping files).
+
+- [x] **Step 2: Run the narrow private-integration scan.**
 
 Run: `rg -n "RuntimeAPI|Electron|ipc|zustand|localhost|127\\.0\\.0\\.1|fetch\\(" --glob '*.ts' --glob '*.html' panel src tests`
 
 Expected: no output. Any match requires removal or an ADR/spec correction before release; no exception for a convenience fallback.
+
+Completed on 2026-09-22: scan via Grep over `panel`/`src`/`tests` `*.ts`/`*.html` returned no matches (`rg` is unavailable in this environment; Grep used the same pattern and file scope).
 
 - [ ] **Step 3: Verify folder installation and the Host permission dialog manually.**
 
