@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0-E4 completed and verified on 2026-09-22. E5-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
+**Execution status:** E0-E5 completed and verified on 2026-09-22. E6-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed. The folder-install visual smoke test remains part of E7.
 
 ## Global Constraints
 
@@ -839,13 +839,15 @@ Manual acceptance in OpenChamber: create a card, Start it, confirm a new worktre
 - Create: `src/automation-gate.ts`
 - Create: `tests/automation-gate.test.ts`
 - Modify: `src/render-page.ts`
-- Modify: `src/session-workflow.ts`
+- Modify: `src/render-panel.ts`
+- Modify: `tests/support/fake-host.ts`
+- Modify: `tests/surface-lifecycle.test.ts`
 
 **Consumes:** Current SDK v1 contract and ADR-001's four upstream requirements.
 
 **Produces:** A visible unavailable banner and a code path that cannot accidentally use summary fields as automation events.
 
-- [ ] **Step 1: Write failing gate tests.**
+- [x] **Step 1: Write failing gate tests.**
 
 ```ts
 // tests/automation-gate.test.ts
@@ -913,21 +915,25 @@ test("actual Host completion events leave persisted card status unchanged", asyn
 });
 ```
 
-- [ ] **Step 2: Run the gate test before implementation.**
+- [x] **Step 2: Run the gate test before implementation.**
 
 Run: `bun test tests/automation-gate.test.ts`
 
 Expected: FAIL because the gate module does not exist.
 
-- [ ] **Step 3: Implement a static, fail-closed v1 gate.**
+Observed on 2026-09-22: FAILED as expected (`Cannot find module '../src/automation-gate'`).
+
+- [x] **Step 3: Implement a static, fail-closed v1 gate.**
 
 `automationState()` returns the test fixture exactly while `@openchamber/sdk@1.24.2` is pinned. The page renders a Host-themed, localized banner whose English fallback is `Automation unavailable on this OpenChamber version`; it does not render Coordinator, Goal, auto-review, auto-feedback, merge, or retry controls. Session subscription handlers must not import or call board-transition methods, and v1 must not register `onSessionLifecycle` at all.
 
-- [ ] **Step 4: Verify the gate and the full test suite.**
+- [x] **Step 4: Verify the gate and the full test suite.**
 
 Run: `bun test tests/automation-gate.test.ts && bun run check`
 
 Expected: PASS. The fake-Host completed lifecycle regression proves persisted state stays unchanged; inspect `src/session-workflow.ts` and subscription callbacks to verify all state changes originate from visible user-action handlers only.
+
+Completed on 2026-09-22: `bun run check` (71 tests, 180 expects) and `bun run build` passed. `automationState()` fails closed with all four missing contracts; `assertNoAutomaticTransition` throws on summary fields; the fake-Host lifecycle event leaves persisted status `in_progress`, a spy listener observes the emitted event, `onSessionLifecycle` unsubscribe restores `lifecycleSubscriptionCount()` to 0, and a source-policy test forbids `onSessionLifecycle`/`.moveCard(` across all production sources; the page shows a localized always-on info banner (`Automation unavailable on this OpenChamber version` / `当前 OpenChamber 版本不支持自动化`); source inspection confirms subscription handlers never call `moveCard`.
 
 ## E6: Upgrade to an Automatic Loop Only After an Official SDK Release
 

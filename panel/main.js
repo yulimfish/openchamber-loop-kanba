@@ -1989,6 +1989,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     en: {
       active: "Active",
       adoptSession: "Adopt discovered session",
+      automationUnavailable: "Automation unavailable on this OpenChamber version",
       clearPending: "Clear pending after native inspection",
       done: "Done",
       inProgress: "In progress",
@@ -2011,6 +2012,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     "zh-CN": {
       active: "进行中",
       adoptSession: "认领已发现会话",
+      automationUnavailable: "当前 OpenChamber 版本不支持自动化",
       clearPending: "原生检查后清除待处理",
       done: "已完成",
       inProgress: "处理中",

@@ -2281,6 +2281,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     en: {
       active: "Active",
       adoptSession: "Adopt discovered session",
+      automationUnavailable: "Automation unavailable on this OpenChamber version",
       clearPending: "Clear pending after native inspection",
       done: "Done",
       inProgress: "In progress",
@@ -2303,6 +2304,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     "zh-CN": {
       active: "进行中",
       adoptSession: "认领已发现会话",
+      automationUnavailable: "当前 OpenChamber 版本不支持自动化",
       clearPending: "原生检查后清除待处理",
       done: "已完成",
       inProgress: "处理中",
@@ -2340,9 +2342,11 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     let state = initialPageState;
     let draft = { title: "", prompt: "" };
     let emptySlot;
+    let automationSlot;
     let bannerSlot;
     const handles = [];
     let empty;
+    let automationBanner;
     let banner;
     let project;
     let active2;
@@ -2364,6 +2368,9 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         return;
       empty?.update({ title: state.error ?? label("noProject") });
       ui.setHidden(emptySlot, !state.empty);
+      if (automationBanner) {
+        automationBanner.update({ tone: "info", title: label("automationUnavailable") });
+      }
       if (banner && bannerSlot) {
         ui.setHidden(bannerSlot, !state.notice);
         banner.update({ tone: "warning", title: state.notice ?? "" });
@@ -2405,11 +2412,13 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         mounted = true;
         const root = ui.mountRoot("page");
         emptySlot = ui.createSlot(root, "empty");
+        automationSlot = ui.createSlot(root, "automation");
         bannerSlot = ui.createSlot(root, "banner");
         const toolbar = ui.createSlot(root, "toolbar");
         const form = ui.createSlot(root, "draft");
         const board = ui.createSlot(root, "board");
         empty = ui.mountEmpty(emptySlot, { title: "" });
+        automationBanner = ui.mountBanner(automationSlot, { tone: "info", title: "" });
         banner = ui.mountBanner(bannerSlot, { tone: "warning", title: "" });
         ui.setHidden(bannerSlot, true);
         project = ui.mountSelect(ui.createSlot(toolbar, "project"), { value: null, options: [], onChange: (projectId) => state.onSelectProject?.(projectId) });
@@ -2445,7 +2454,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
           columns.set(status, { heading, list });
           handles.push(heading, list);
         }
-        handles.push(empty, banner, project, active2, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
+        handles.push(empty, automationBanner, banner, project, active2, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
         render();
       },
       applyReady: (context) => {

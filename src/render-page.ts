@@ -63,9 +63,11 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
   let state = initialPageState;
   let draft: PageDraft = { title: "", prompt: "" };
   let emptySlot: UiSlot | undefined;
+  let automationSlot: UiSlot | undefined;
   let bannerSlot: UiSlot | undefined;
   const handles: Array<Handle<unknown>> = [];
   let empty: Handle<EmptyProps> | undefined;
+  let automationBanner: Handle<BannerProps> | undefined;
   let banner: Handle<BannerProps> | undefined;
   let project: Handle<SelectProps> | undefined;
   let active: Handle<BadgeProps> | undefined;
@@ -89,6 +91,9 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
     if (!mounted) return;
     empty?.update({ title: state.error ?? label("noProject") });
     ui.setHidden(emptySlot as UiSlot, !state.empty);
+    if (automationBanner) {
+      automationBanner.update({ tone: "info", title: label("automationUnavailable") });
+    }
     if (banner && bannerSlot) {
       ui.setHidden(bannerSlot, !state.notice);
       banner.update({ tone: "warning", title: state.notice ?? "" });
@@ -130,11 +135,13 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
       mounted = true;
       const root = ui.mountRoot("page");
       emptySlot = ui.createSlot(root, "empty");
+      automationSlot = ui.createSlot(root, "automation");
       bannerSlot = ui.createSlot(root, "banner");
       const toolbar = ui.createSlot(root, "toolbar");
       const form = ui.createSlot(root, "draft");
       const board = ui.createSlot(root, "board");
       empty = ui.mountEmpty(emptySlot, { title: "" });
+      automationBanner = ui.mountBanner(automationSlot, { tone: "info", title: "" });
       banner = ui.mountBanner(bannerSlot, { tone: "warning", title: "" });
       ui.setHidden(bannerSlot, true);
       project = ui.mountSelect(ui.createSlot(toolbar, "project"), { value: null, options: [], onChange: (projectId) => state.onSelectProject?.(projectId) });
@@ -164,7 +171,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
         columns.set(status, { heading, list });
         handles.push(heading, list);
       }
-      handles.push(empty, banner, project, active, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
+      handles.push(empty, automationBanner, banner, project, active, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
       render();
     },
     applyReady: (context) => {

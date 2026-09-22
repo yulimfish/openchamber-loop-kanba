@@ -299,6 +299,16 @@ test("read-only lease state disables Start actions before any click", () => {
   expect(ui.isDisabled("startMain")).toBe(false);
 });
 
+test("page shows the localized automation-unavailable banner on every ready", () => {
+  const ui = createFakeUiKit();
+  const page = createPageSurface(ui);
+  page.mount();
+  page.applyReady({ locale: "zh-CN" } as HostReadyContext);
+  expect(ui.visibleText("automation")).toBe("当前 OpenChamber 版本不支持自动化");
+  page.applyReady({ locale: "en" } as HostReadyContext);
+  expect(ui.visibleText("automation")).toBe("Automation unavailable on this OpenChamber version");
+});
+
 test("pending cards disable Start and show the notice banner when set", () => {
   const ui = createFakeUiKit();
   const page = createPageSurface(ui);

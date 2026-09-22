@@ -239,6 +239,8 @@ export const createFakeHost = (options: FakeHostOptions = {}) => {
   const openedSessionIds: string[] = [];
   const startRequests: StartSessionRequest[] = [];
   const sessionLifecycleEvents: Array<{ sessionId: string; phase: string }> = [];
+  const sessionLifecycleListeners = new Set<(event: { sessionId: string; phase: string }) => void>();
+  let lifecycleSubscriptions = 0;
   const fake = {
     client: undefined as unknown as HostClientPort,
     openedSessionIds,
@@ -280,7 +282,17 @@ export const createFakeHost = (options: FakeHostOptions = {}) => {
     },
     emitSessionLifecycle: (event: { sessionId: string; phase: string }) => {
       sessionLifecycleEvents.push(event);
+      sessionLifecycleListeners.forEach((listener) => listener(event));
     },
+    onSessionLifecycle: (listener: (event: { sessionId: string; phase: string }) => void) => {
+      lifecycleSubscriptions += 1;
+      sessionLifecycleListeners.add(listener);
+      return () => {
+        lifecycleSubscriptions -= 1;
+        sessionLifecycleListeners.delete(listener);
+      };
+    },
+    lifecycleSubscriptionCount: () => lifecycleSubscriptions,
     releaseDeferredWorktreeRegistration: () => releaseDeferredWorktreeRegistration?.(),
   };
 
