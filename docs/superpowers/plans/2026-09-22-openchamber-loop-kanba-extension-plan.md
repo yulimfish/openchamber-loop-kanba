@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bun, TypeScript in strict mode, `@openchamber/sdk@1.24.2`, `@openchamber/sdk/ui`, Bun's built-in test runner, OpenChamber folder installation.
 
-**Execution status:** E0 completed and verified on 2026-09-22. E1-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed.
+**Execution status:** E0-E1 completed and verified on 2026-09-22. E2-E7 remain pending; later acceptance commands are not evidence until their corresponding task is completed.
 
 ## Global Constraints
 
@@ -234,7 +234,7 @@ Expected: FAIL because `package.json` is absent or has no `openchamber` manifest
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build panel/main.ts --outdir panel --target browser --format iife --bundle --naming '[name].js' && bun build panel/page.ts --outdir panel --target browser --format iife --bundle --naming '[name].js'",
+    "build": "bun build panel/main.ts --outdir panel --target browser --format iife --bundle --entry-naming '[name].js' && bun build panel/page.ts --outdir panel --target browser --format iife --bundle --entry-naming '[name].js'",
     "test": "bun test",
     "check": "tsc --noEmit && bun test"
   },
@@ -306,7 +306,7 @@ Expected: PASS. Record the exported `StartSessionRequest`, `StartSessionResult`,
 
 **Produces:** Both installable pages connect through one adapter, unsubscribe on teardown, and can open an existing native session.
 
-- [ ] **Step 1: Write the adapter tests against a fake Host.**
+- [x] **Step 1: Write the adapter tests against a fake Host.**
 
 ```ts
 // tests/host-adapter.test.ts
@@ -345,13 +345,13 @@ test("awaits workspace subscriptions and disposes the Host client on surface tea
 });
 ```
 
-- [ ] **Step 2: Run the adapter test before implementation.**
+- [x] **Step 2: Run the adapter test before implementation.**
 
 Run: `bun test tests/host-adapter.test.ts`
 
 Expected: FAIL because `createHostAdapter` and the fake Host do not exist.
 
-- [ ] **Step 3: Implement the documents and adapter with exactly one connection path.**
+- [x] **Step 3: Implement the documents and adapter with exactly one connection path.**
 
 Each HTML file must only supply the viewport metadata, `<main id="app"></main>`, and its built JavaScript entry; no inline styles, inline event handlers, or private Host probes.
 
@@ -373,7 +373,7 @@ Each HTML file must only supply the viewport metadata, `<main id="app"></main>`,
 
 `createHostAdapter(client = connectHost())` must create and wrap the client synchronously, call only the list/subscription/session/storage APIs named in ADR-001, and preserve the complete SDK `HostRequestErrorCode` union. It maps `NOT_GRANTED`, `SESSION_BUSY`, `NO_SESSION`, `NO_DIRECTORY`, `HOST_TIMEOUT`, `DISABLED`, and `HOST_UNAVAILABLE` to specific recovery copy; every other code, including `HOST_REJECTED`, receives safe generic Host-rejection copy. Its optional `client` parameter exists solely for unit-test fakes. `createFakeHost()` supports typed `nextStart`, `nextStartError`, subscription emitters, and a `disposed` assertion. `createUnsafeBoardStore(card)` is test-only and implements the BoardStore read methods by returning the supplied raw card without schema validation, so workflow limits are tested even against corrupted persisted data. It preserves the SDK's `HostReadyContext`, `Guest*Snapshot`, `StartSessionResult`, and asynchronous workspace-subscription signatures. `panel/main.ts` and `panel/page.ts` await workspace subscription registration, then attach `beforeunload` cleanup that invokes every subscription disposer exactly once and calls `adapter.dispose()`. No production module other than this adapter imports or receives the SDK Host client.
 
-- [ ] **Step 4: Verify adapter behavior, type safety, and IIFE outputs.**
+- [x] **Step 4: Verify adapter behavior, type safety, and IIFE outputs.**
 
 Run: `bun test tests/host-adapter.test.ts && bun run check && bun run build`
 

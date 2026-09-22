@@ -36,3 +36,7 @@ test("does not request elevated capabilities", () => {
 test("is accepted by the official OpenChamber manifest parser", () => {
   expect(parseManifest(manifest).ok).toBe(true);
 });
+
+test("uses Bun's supported entry naming option for classic IIFE outputs", () => {
+  expect(manifest.scripts.build).toContain("--entry-naming");
+});

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build panel/main.ts --outdir panel --target browser --format iife --bundle --naming '[name].js' && bun build panel/page.ts --outdir panel --target browser --format iife --bundle --naming '[name].js'",
+    "build": "bun build panel/main.ts --outdir panel --target browser --format iife --bundle --entry-naming '[name].js' && bun build panel/page.ts --outdir panel --target browser --format iife --bundle --entry-naming '[name].js'",
     "test": "bun test",
     "check": "tsc --noEmit && bun test"
   },
