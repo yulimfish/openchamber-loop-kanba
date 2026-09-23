@@ -1,4 +1,4 @@
-# openchamber-loop-kanba Extension Design
+# openchamber-loop-kanban Extension Design
 
 **状态：** 已接受，按官方 SDK v1 能力分阶段交付
 
@@ -15,7 +15,7 @@
 ```text
 RAIL PANEL
 ┌──────────────────────────────────┐
-│ Loop Kanba                 [3]   │
+│ Loop Kanban                 [3]   │
 ├──────────────────────────────────┤
 │ Current project                  │
 │ 2 active · 1 review · 4 queued   │
@@ -61,7 +61,7 @@ panel 以 `onDirectory(directory)` 和 `onProjects` 的 `GuestProject.directory`
 ## Manifest 与目录
 
 ```text
-openchamber-loop-kanba/
+openchamber-loop-kanban/
 ├── package.json
 ├── bun.lock
 ├── panel/
@@ -97,19 +97,19 @@ openchamber-loop-kanba/
 
 ```json
 {
-  "name": "openchamber-loop-kanba",
+  "name": "openchamber-loop-kanban",
   "version": "0.1.0",
   "openchamber": {
     "apiVersion": 1,
     "engines": { "openchamber": ">=1.24.2" },
     "contributes": {
       "panel": {
-        "id": "openchamber-loop-kanba",
-        "name": "Loop Kanba",
+        "id": "openchamber-loop-kanban",
+        "name": "Loop Kanban",
         "icon": "kanban-view",
         "entry": "panel/index.html"
       },
-      "page": { "entry": "panel/page.html", "title": "Loop Kanba" },
+      "page": { "entry": "panel/page.html", "title": "Loop Kanban" },
       "capabilities": ["sessions", "prompt"]
     }
   }
@@ -124,7 +124,7 @@ openchamber-loop-kanba/
 type CardStatus = "todo" | "in_progress" | "needs_review" | "done";
 
 interface BoardProject {
-  schema: "openchamber-loop-kanba/v1";
+  schema: "openchamber-loop-kanban/v1";
   projectId: string;
   concurrencyLimit: number;
   version: number;
@@ -154,8 +154,8 @@ interface BoardCard {
 键名固定为：
 
 ```text
-openchamber-loop-kanba/v1/project/<sha256(projectId)>
-openchamber-loop-kanba/v1/card/<uuid>
+openchamber-loop-kanban/v1/project/<sha256(projectId)>
+openchamber-loop-kanban/v1/card/<uuid>
 ```
 
 `projectKey(projectId)` 使用 SHA-256 的 hex digest，确保任意 Host project ID 不会突破 128 字符 storage-key 上限；card ID 由扩展以 UUID 生成。`loadBoard(projectId)` 通过 `storage.keys()` 找到 card key，再按卡片内的 `projectId` 过滤和按 `status`、`position` 排序；card ID 全局唯一。panel 只读 board storage，full page 是唯一可写 surface，避免用没有 CAS 或 multi-key transaction 的 Host storage 实现跨 surface 索引同步。
@@ -167,7 +167,7 @@ full page 通过 `BroadcastChannel` writer lease 在**同一扩展客户端**内
 ## SDK v1 可交付工作流
 
 1. 用户在 full page 的 `todo` 列新增卡片并设置标题、prompt 和排序。
-2. 用户选择 Start。扩展先检查项目的 `concurrencyLimit`、`text` 不超过 16,000 字符、`id`/`title`/`url`/`data` 的 SDK 限制，再同步设置内存 in-flight guard，并将 card 的 `pendingStartRole`、随机 request ID、时间戳写入单个 card key 后禁用该卡的 Start/Review 按钮。只有 pending 写入成功才调用 `host.startSession`，并传入固定 `providerId: "openchamber-loop-kanba"`、card ID、标题、固定扩展 URL、`text: card.prompt`、`projectId`、`worktree: { kind: "new", name }` 和扩展 item data。
+2. 用户选择 Start。扩展先检查项目的 `concurrencyLimit`、`text` 不超过 16,000 字符、`id`/`title`/`url`/`data` 的 SDK 限制，再同步设置内存 in-flight guard，并将 card 的 `pendingStartRole`、随机 request ID、时间戳写入单个 card key 后禁用该卡的 Start/Review 按钮。只有 pending 写入成功才调用 `host.startSession`，并传入固定 `providerId: "openchamber-loop-kanban"`、card ID、标题、固定扩展 URL、`text: card.prompt`、`projectId`、`worktree: { kind: "new", name }` 和扩展 item data。
 3. Host 的 `sent` 是 `"sent" | "no-model" | "skipped" | "failed"`，不是布尔值。只要结果带有非空 `sessionId`，扩展就用**一次** card-key 写入一起保存 session/worktree、`linked` 状态、目标列和已清除的 pending；不得在该写入后单独移动卡片。因为用户的 Start 操作移入 `in_progress`，而 `sent !== "sent"` 额外显示可恢复 banner，绝不自动重试。若这次结果写入失败，原有 pending 保留并阻止再次 Start，直至用户完成原生检查后显式清除。若结果为 `sessionId: null, sent: "skipped"` 且保留 directory/worktree，则也用一次 card-key 写入保存 directory、清空 pending、留在 `todo` 并显示 `bootstrap-failed` 或 `session-create-failed`。`HOST_TIMEOUT` 是 rejected request，结果不证明 Host 未创建 worktree 或会话；扩展保留 pending、禁止重试，并提示用户先在原生项目检查后才能显式清除 pending。
 
 任何 `HostRequestError` 都保留 pending。用户可先选择 Adopt discovered session：仅当 `listSessions` 找到唯一一项、且其 extension item data 精确匹配 card ID 与 role 时，才用一次 card-key 写入认领该 session；零项或多项时保持 pending，绝不猜测、自动发送 prompt 或自动重试。

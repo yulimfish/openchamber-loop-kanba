@@ -1917,7 +1917,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     };
   };
   // src/schema.ts
-  var BOARD_SCHEMA = "openchamber-loop-kanba/v1";
+  var BOARD_SCHEMA = "openchamber-loop-kanban/v1";
   var CARD_KEY_PREFIX = `${BOARD_SCHEMA}/card/`;
   var PROJECT_KEY_PREFIX = `${BOARD_SCHEMA}/project/`;
   var textEncoder = new TextEncoder;
@@ -2198,7 +2198,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
 
   // src/host-adapter.ts
   var itemData = (projectId, cardId, role) => ({
-    schema: "openchamber-loop-kanba/v1",
+    schema: "openchamber-loop-kanban/v1",
     projectId,
     cardId,
     role
@@ -2226,7 +2226,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     onWorktrees: client.onWorktrees,
     onSessions: client.onSessions,
     startMain: ({ projectId, cardId, title, worktreeName, prompt }) => client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",
@@ -2237,7 +2237,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       data: itemData(projectId, cardId, "main")
     }),
     startReview: ({ projectId, cardId, title, directory, prompt }) => client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",
@@ -2484,7 +2484,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
   var itemRole = (session, projectId) => {
     for (const item of session.items) {
       const data = item.data;
-      if (isDataRecord(data) && data.schema === "openchamber-loop-kanba/v1" && data.projectId === projectId && (data.role === "main" || data.role === "review"))
+      if (isDataRecord(data) && data.schema === "openchamber-loop-kanban/v1" && data.projectId === projectId && (data.role === "main" || data.role === "review"))
         return data.role;
     }
     return;
@@ -2499,7 +2499,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       throw new Error("Session title exceeds 200 characters");
     if (card.id.length > 128)
       throw new Error("Session ID exceeds 128 characters");
-    const data = { schema: "openchamber-loop-kanba/v1", projectId: card.projectId, cardId: card.id, role };
+    const data = { schema: "openchamber-loop-kanban/v1", projectId: card.projectId, cardId: card.id, role };
     if (JSON.stringify(data).length > 16000)
       throw new Error("Session item data exceeds 16000 characters");
     return text;
@@ -2603,7 +2603,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       const sessions = await adapter.listSessions(card.projectId);
       const matches = sessions.sessions.filter((session2) => session2.items.some((item) => {
         const data = item.data;
-        return isDataRecord(data) && data.schema === "openchamber-loop-kanba/v1" && data.projectId === card.projectId && data.cardId === card.id && data.role === role;
+        return isDataRecord(data) && data.schema === "openchamber-loop-kanban/v1" && data.projectId === card.projectId && data.cardId === card.id && data.role === role;
       }));
       if (matches.length !== 1) {
         const available = sessions.sessions.map((session2) => session2.id).join(", ") || "none";
@@ -2632,7 +2632,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
   };
 
   // src/writer-lease.ts
-  var channelName = "openchamber-loop-kanba/board-writer";
+  var channelName = "openchamber-loop-kanban/board-writer";
   var createWriterLease = ({
     channelFactory = (name) => new BroadcastChannel(name),
     id = crypto.randomUUID()

@@ -18,12 +18,12 @@
     "engines": { "openchamber": ">=1.24.2" },
     "contributes": {
       "panel": {
-        "id": "openchamber-loop-kanba",
-        "name": "Loop Kanba",
+        "id": "openchamber-loop-kanban",
+        "name": "Loop Kanban",
         "icon": "kanban-view",
         "entry": "panel/index.html"
       },
-      "page": { "entry": "panel/page.html", "title": "Loop Kanba" },
+      "page": { "entry": "panel/page.html", "title": "Loop Kanban" },
       "capabilities": ["sessions", "prompt"]
     }
   }

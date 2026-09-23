@@ -1,4 +1,4 @@
-# openchamber-loop-kanba Implementation Plan
+# openchamber-loop-kanban Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Package name, panel ID, and storage prefix are exactly `openchamber-loop-kanba`.
+- Package name, panel ID, and storage prefix are exactly `openchamber-loop-kanban`.
 - Require OpenChamber `>=1.24.2` and declare `openchamber.apiVersion: 1`.
 - Request exactly `sessions` and `prompt`; never request `service`, `filesystem`, `files`, `model`, `network`, or `conversation`.
 - Only use documented `@openchamber/sdk` APIs. Do not use private HTTP endpoints, Zustand stores, DOM scraping, RuntimeAPI, or Electron IPC.
@@ -26,7 +26,7 @@
 - Before the first edit that changes UI layout, hierarchy, or component structure in `panel/*.html` or `src/render-*.ts`, show the approved ASCII wireframe from the design spec and obtain one-line user confirmation. Pure behavior-only edits do not need this gate.
 - Do not run `git add`, `git commit`, or `git push` unless the user explicitly authorizes it for that execution session.
 
-**Source of truth:** `docs/decisions/ADR-001-openchamber-extension-host-api.md`, `docs/superpowers/specs/2026-09-22-openchamber-loop-kanba-extension-design.md`, and `docs/traceability.md`.
+**Source of truth:** `docs/decisions/ADR-001-openchamber-extension-host-api.md`, `docs/superpowers/specs/2026-09-22-openchamber-loop-kanban-extension-design.md`, and `docs/traceability.md`.
 
 ---
 
@@ -67,7 +67,7 @@ All later tasks must use these names; avoid introducing parallel adapters or a g
 export type CardStatus = "todo" | "in_progress" | "needs_review" | "done";
 
 export interface BoardProject {
-  schema: "openchamber-loop-kanba/v1";
+  schema: "openchamber-loop-kanban/v1";
   projectId: string;
   concurrencyLimit: number;
   version: number;
@@ -99,9 +99,9 @@ const sha256Hex = async (value: string): Promise<string> => {
 };
 
 export const projectKey = async (projectId: string) =>
-  `openchamber-loop-kanba/v1/project/${await sha256Hex(projectId)}`;
+  `openchamber-loop-kanban/v1/project/${await sha256Hex(projectId)}`;
 export const cardKey = (cardId: string) =>
-  `openchamber-loop-kanba/v1/card/${cardId}`;
+  `openchamber-loop-kanban/v1/card/${cardId}`;
 ```
 
 ```ts
@@ -187,10 +187,10 @@ import { parseManifest } from "@openchamber/sdk/schemas";
 const manifest = await Bun.file("package.json").json();
 
 test("declares the minimum OpenChamber v1 extension surface", () => {
-  expect(manifest.name).toBe("openchamber-loop-kanba");
+  expect(manifest.name).toBe("openchamber-loop-kanban");
   expect(manifest.openchamber.apiVersion).toBe(1);
   expect(manifest.openchamber.engines.openchamber).toBe(">=1.24.2");
-  expect(manifest.openchamber.contributes.panel.id).toBe("openchamber-loop-kanba");
+  expect(manifest.openchamber.contributes.panel.id).toBe("openchamber-loop-kanban");
   expect(manifest.openchamber.contributes.panel.entry).toBe("panel/index.html");
   expect(manifest.openchamber.contributes.page.entry).toBe("panel/page.html");
   expect(manifest.openchamber.contributes.capabilities).toEqual([
@@ -229,7 +229,7 @@ Expected: FAIL because `package.json` is absent or has no `openchamber` manifest
 
 ```json
 {
-  "name": "openchamber-loop-kanba",
+  "name": "openchamber-loop-kanban",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -248,12 +248,12 @@ Expected: FAIL because `package.json` is absent or has no `openchamber` manifest
     "engines": { "openchamber": ">=1.24.2" },
     "contributes": {
       "panel": {
-        "id": "openchamber-loop-kanba",
-        "name": "Loop Kanba",
+        "id": "openchamber-loop-kanban",
+        "name": "Loop Kanban",
         "icon": "kanban-view",
         "entry": "panel/index.html"
       },
-      "page": { "entry": "panel/page.html", "title": "Loop Kanba" },
+      "page": { "entry": "panel/page.html", "title": "Loop Kanban" },
       "capabilities": ["sessions", "prompt"]
     }
   }
@@ -362,7 +362,7 @@ Each HTML file must only supply the viewport metadata, `<main id="app"></main>`,
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Loop Kanba</title>
+    <title>Loop Kanban</title>
   </head>
   <body>
     <main id="app"></main>
@@ -539,7 +539,7 @@ test("stores each card independently from the per-project settings", async () =>
   expect(await storage.get(await projectKey("project-a"))).toEqual(
     expect.objectContaining({ projectId: "project-a", concurrencyLimit: 3 }),
   );
-  expect(await storage.get(`openchamber-loop-kanba/v1/card/${card.id}`)).toEqual(
+  expect(await storage.get(`openchamber-loop-kanban/v1/card/${card.id}`)).toEqual(
     expect.objectContaining({ id: card.id, projectId: "project-a" }),
   );
 });
@@ -633,7 +633,7 @@ Completed on 2026-09-22: `bun test tests/board-store.test.ts`, `bun run check`, 
 
 **Produces:** Users can explicitly start a Main worktree session, explicitly create a Review session on that same worktree, and open native OpenChamber session details.
 
-`createWriterLease()` uses `BroadcastChannel("openchamber-loop-kanba/board-writer")` with a per-page UUID. It waits for peer announcements before enabling mutations; when two pages in the same extension client are present, the lexicographically smaller UUID is writer and the other page is read-only. `reserveMain(projectId, cardId, limit, board)` synchronously measures existing capacity before inserting: persisted pending-Main cards plus existing `in_progress` cards plus other unpersisted reservations. Reject when that pre-insertion count is `>= limit`; otherwise insert this reservation, so the admitted Start consumes one of the available slots without rejecting itself. On successful persistence of the initial pending record, release the in-memory reservation immediately: that persisted pending record is now the sole capacity count. If the pending write fails, release it too. Every later terminal path (successful session link, skipped-result record, timeout/rejection, result-write failure, adoption, or explicit pending clear) must leave no in-memory reservation; the persistent pending or `in_progress` state then supplies the count when applicable. This prevents same-client double Start only; SDK v1 lacks CAS or a server-side lease, so cross-client concurrency is explicitly best-effort. Test two leases and the limit-1/two-card race without a real browser by injecting a fake channel factory.
+`createWriterLease()` uses `BroadcastChannel("openchamber-loop-kanban/board-writer")` with a per-page UUID. It waits for peer announcements before enabling mutations; when two pages in the same extension client are present, the lexicographically smaller UUID is writer and the other page is read-only. `reserveMain(projectId, cardId, limit, board)` synchronously measures existing capacity before inserting: persisted pending-Main cards plus existing `in_progress` cards plus other unpersisted reservations. Reject when that pre-insertion count is `>= limit`; otherwise insert this reservation, so the admitted Start consumes one of the available slots without rejecting itself. On successful persistence of the initial pending record, release the in-memory reservation immediately: that persisted pending record is now the sole capacity count. If the pending write fails, release it too. Every later terminal path (successful session link, skipped-result record, timeout/rejection, result-write failure, adoption, or explicit pending clear) must leave no in-memory reservation; the persistent pending or `in_progress` state then supplies the count when applicable. This prevents same-client double Start only; SDK v1 lacks CAS or a server-side lease, so cross-client concurrency is explicitly best-effort. Test two leases and the limit-1/two-card race without a real browser by injecting a fake channel factory.
 
 - [x] **Step 1: Write failing workflow tests.**
 
@@ -660,7 +660,7 @@ test("starts a Main session with the complete SDK request and records its link",
   await workflow.startMain(card.id);
 
   expect(host.startRequests).toEqual([{
-    providerId: "openchamber-loop-kanba",
+    providerId: "openchamber-loop-kanban",
     id: card.id,
     title: card.title,
     url: "https://openchamber.dev",
@@ -669,7 +669,7 @@ test("starts a Main session with the complete SDK request and records its link",
     worktree: { kind: "new", name: card.id },
     navigation: "preserve",
     data: {
-      schema: "openchamber-loop-kanba/v1",
+      schema: "openchamber-loop-kanban/v1",
       projectId: "project-a",
       cardId: card.id,
       role: "main",
@@ -790,7 +790,7 @@ Expected: FAIL because the workflow module does not exist.
 
 ```ts
 {
-  providerId: "openchamber-loop-kanba",
+  providerId: "openchamber-loop-kanban",
   id: card.id,
   title: card.title,
   url: "https://openchamber.dev",
@@ -799,7 +799,7 @@ Expected: FAIL because the workflow module does not exist.
   worktree: { kind: "new", name: card.id },
   navigation: "preserve",
   data: {
-  schema: "openchamber-loop-kanba/v1",
+  schema: "openchamber-loop-kanban/v1",
   projectId: card.projectId,
   cardId: card.id,
   role: "main",

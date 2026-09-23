@@ -29,7 +29,7 @@ const itemRole = (session: { items: Array<{ data?: unknown }> }, projectId: stri
     const data = item.data;
     if (
       isDataRecord(data)
-      && data.schema === "openchamber-loop-kanba/v1"
+      && data.schema === "openchamber-loop-kanban/v1"
       && data.projectId === projectId
       && (data.role === "main" || data.role === "review")
     ) return data.role;
@@ -43,7 +43,7 @@ const assertStartPayload = (card: BoardCard, role: SessionRole): string => {
   if (text.length > 16_000) throw new Error("Session text exceeds 16000 characters");
   if (card.title.length > 200) throw new Error("Session title exceeds 200 characters");
   if (card.id.length > 128) throw new Error("Session ID exceeds 128 characters");
-  const data = { schema: "openchamber-loop-kanba/v1", projectId: card.projectId, cardId: card.id, role };
+  const data = { schema: "openchamber-loop-kanban/v1", projectId: card.projectId, cardId: card.id, role };
   if (JSON.stringify(data).length > 16_000) throw new Error("Session item data exceeds 16000 characters");
   return text;
 };
@@ -155,7 +155,7 @@ export const createSessionWorkflow = (
     const matches = sessions.sessions.filter((session) => session.items.some((item) => {
       const data = item.data;
       return isDataRecord(data)
-        && data.schema === "openchamber-loop-kanba/v1"
+        && data.schema === "openchamber-loop-kanban/v1"
         && data.projectId === card.projectId
         && data.cardId === card.id
         && data.role === role;

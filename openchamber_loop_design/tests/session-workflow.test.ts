@@ -26,7 +26,7 @@ const sessionRecord = (overrides: Partial<{
 
 const matchingItem = (cardId: string, role: string, projectId = "project-a") => ({
   id: "item",
-  data: { schema: "openchamber-loop-kanba/v1", projectId, cardId, role },
+  data: { schema: "openchamber-loop-kanban/v1", projectId, cardId, role },
 });
 
 test("starts a Main session with the complete SDK request and records its link", async () => {
@@ -38,7 +38,7 @@ test("starts a Main session with the complete SDK request and records its link",
   await createSessionWorkflow(createHostAdapter(host.client), store).startMain(card.id);
 
   expect(host.startRequests).toEqual([{
-    providerId: "openchamber-loop-kanba",
+    providerId: "openchamber-loop-kanban",
     id: card.id,
     title: "T",
     url: "https://openchamber.dev",
@@ -46,7 +46,7 @@ test("starts a Main session with the complete SDK request and records its link",
     projectId: "project-a",
     worktree: { kind: "new", name: card.id },
     navigation: "preserve",
-    data: { schema: "openchamber-loop-kanba/v1", projectId: "project-a", cardId: card.id, role: "main" },
+    data: { schema: "openchamber-loop-kanban/v1", projectId: "project-a", cardId: card.id, role: "main" },
   }]);
   expect(await store.getCard(card.id)).toMatchObject({ mainSessionId: "main-1", mainSessionLinked: true, status: "in_progress", pendingStartRole: null });
 });
@@ -118,7 +118,7 @@ test("adopts exactly one discovered pending Main session and clears it explicitl
   await store.beginSessionStart(card.id, { role: "main", requestId: "request-a" });
   host.emitSessions("project-a", {
     kind: "sessions", projectId: "project-a", state: "ready", coverage: [],
-    sessions: [{ id: "main-1", title: "Native", projectId: "project-a", directory: "/worktrees/card-1", parentId: null, createdAt: 0, updatedAt: 0, archivedAt: null, worktree: null, activity: "idle", outcome: null, items: [{ id: "item", data: { schema: "openchamber-loop-kanba/v1", projectId: "project-a", cardId: card.id, role: "main" } }] }],
+    sessions: [{ id: "main-1", title: "Native", projectId: "project-a", directory: "/worktrees/card-1", parentId: null, createdAt: 0, updatedAt: 0, archivedAt: null, worktree: null, activity: "idle", outcome: null, items: [{ id: "item", data: { schema: "openchamber-loop-kanban/v1", projectId: "project-a", cardId: card.id, role: "main" } }] }],
   });
   const workflow = createSessionWorkflow(createHostAdapter(host.client), store);
 
@@ -260,7 +260,7 @@ test("Review request equals the Main shape except worktree and role", async () =
   await createSessionWorkflow(createHostAdapter(host.client), store).startReview(card.id);
 
   expect(host.startRequests[0]).toEqual({
-    providerId: "openchamber-loop-kanba",
+    providerId: "openchamber-loop-kanban",
     id: card.id,
     title: "T",
     url: "https://openchamber.dev",
@@ -268,7 +268,7 @@ test("Review request equals the Main shape except worktree and role", async () =
     projectId: "project-a",
     worktree: { kind: "existing", directory: "/worktrees/card-1" },
     navigation: "preserve",
-    data: { schema: "openchamber-loop-kanba/v1", projectId: "project-a", cardId: card.id, role: "review" },
+    data: { schema: "openchamber-loop-kanban/v1", projectId: "project-a", cardId: card.id, role: "review" },
   });
 });
 

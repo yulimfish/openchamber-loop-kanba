@@ -9,7 +9,7 @@ test("declares the minimum OpenChamber v1 extension surface", () => {
   expect(manifest.name).toBe("openchamber_loop_design");
   expect(manifest.openchamber.apiVersion).toBe(1);
   expect(manifest.openchamber.engines.openchamber).toBe(">=1.24.2");
-  expect(manifest.openchamber.contributes.panel.id).toBe("openchamber-loop-kanba");
+  expect(manifest.openchamber.contributes.panel.id).toBe("openchamber-loop-kanban");
   expect(manifest.openchamber.contributes.panel.entry).toBe("panel/index.html");
   expect(manifest.openchamber.contributes.page.entry).toBe("panel/page.html");
   expect(manifest.openchamber.contributes.capabilities).toEqual([

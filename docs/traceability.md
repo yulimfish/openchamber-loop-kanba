@@ -1,4 +1,4 @@
-# openchamber-loop-kanba Traceability
+# openchamber-loop-kanban Traceability
 
 | ID | 需求 | 规格位置 | 计划阶段 | 验收证据 |
 | --- | --- | --- | --- | --- |

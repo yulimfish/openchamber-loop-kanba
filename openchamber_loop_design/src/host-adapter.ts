@@ -67,7 +67,7 @@ export interface HostAdapter {
 }
 
 const itemData = (projectId: string, cardId: string, role: "main" | "review") => ({
-  schema: "openchamber-loop-kanba/v1",
+  schema: "openchamber-loop-kanban/v1",
   projectId,
   cardId,
   role,
@@ -99,7 +99,7 @@ export const createHostAdapter = (client: HostClientPort = connectHost()): HostA
   onSessions: client.onSessions,
   startMain: ({ projectId, cardId, title, worktreeName, prompt }) =>
     client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",
@@ -111,7 +111,7 @@ export const createHostAdapter = (client: HostClientPort = connectHost()): HostA
     }),
   startReview: ({ projectId, cardId, title, directory, prompt }) =>
     client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",

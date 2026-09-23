@@ -1918,7 +1918,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
   };
   // src/host-adapter.ts
   var itemData = (projectId, cardId, role) => ({
-    schema: "openchamber-loop-kanba/v1",
+    schema: "openchamber-loop-kanban/v1",
     projectId,
     cardId,
     role
@@ -1934,7 +1934,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     onWorktrees: client.onWorktrees,
     onSessions: client.onSessions,
     startMain: ({ projectId, cardId, title, worktreeName, prompt }) => client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",
@@ -1945,7 +1945,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       data: itemData(projectId, cardId, "main")
     }),
     startReview: ({ projectId, cardId, title, directory, prompt }) => client.startSession({
-      providerId: "openchamber-loop-kanba",
+      providerId: "openchamber-loop-kanban",
       id: cardId,
       title,
       url: "https://openchamber.dev",

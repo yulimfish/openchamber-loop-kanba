@@ -1,6 +1,6 @@
 import type { JsonValue } from "@openchamber/sdk";
 
-export const BOARD_SCHEMA = "openchamber-loop-kanba/v1" as const;
+export const BOARD_SCHEMA = "openchamber-loop-kanban/v1" as const;
 export const CARD_KEY_PREFIX = `${BOARD_SCHEMA}/card/`;
 export const PROJECT_KEY_PREFIX = `${BOARD_SCHEMA}/project/`;
 

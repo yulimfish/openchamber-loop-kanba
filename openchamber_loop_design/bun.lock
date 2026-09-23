@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "openchamber-loop-kanba",
+      "name": "openchamber-loop-kanban",
       "devDependencies": {
         "@openchamber/sdk": "1.24.2",
         "@types/bun": "latest",

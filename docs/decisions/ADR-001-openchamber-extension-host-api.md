@@ -12,7 +12,7 @@
 
 ## 决策
 
-将项目重命名为 `openchamber-loop-kanba`，实现为标准 guest iframe extension：
+将项目重命名为 `openchamber-loop-kanban`，实现为标准 guest iframe extension：
 
 - `package.json` 使用 `openchamber.apiVersion: 1`、rail `panel`、完整 `page`，并要求 OpenChamber `>=1.24.2`。
 - `panel/index.html` 是 rail 入口，`panel/page.html` 是完整看板页；所有脚本均由官方 guest bundler 或等价的 classic-IIFE bundler 预构建后提交。

@@ -12,7 +12,7 @@ export interface WriterLeaseOptions {
   id?: string;
 }
 
-const channelName = "openchamber-loop-kanba/board-writer";
+const channelName = "openchamber-loop-kanban/board-writer";
 
 export const createWriterLease = ({
   channelFactory = (name) => new BroadcastChannel(name),

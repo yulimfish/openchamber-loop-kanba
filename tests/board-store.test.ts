@@ -16,7 +16,7 @@ test("stores each card independently from the per-project settings", async () =>
   expect(await storage.get(await projectKey("project-a"))).toEqual(
     expect.objectContaining({ projectId: "project-a", concurrencyLimit: 3 }),
   );
-  expect(await storage.get(`openchamber-loop-kanba/v1/card/${card.id}`)).toEqual(
+  expect(await storage.get(`openchamber-loop-kanban/v1/card/${card.id}`)).toEqual(
     expect.objectContaining({ id: card.id, projectId: "project-a" }),
   );
 });
@@ -98,7 +98,7 @@ test("rejects a corrupt namespaced card record", async () => {
   const storage = createMemoryStorage();
   const store = createBoardStore(storage);
   await store.createProject("project-a", 1);
-  await storage.set(cardKey(crypto.randomUUID()), { schema: "openchamber-loop-kanba/v1" });
+  await storage.set(cardKey(crypto.randomUUID()), { schema: "openchamber-loop-kanban/v1" });
 
   await expect(store.loadBoard("project-a")).rejects.toThrow("Invalid board card storage value");
 });
