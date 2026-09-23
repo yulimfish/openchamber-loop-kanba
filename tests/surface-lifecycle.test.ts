@@ -281,6 +281,50 @@ test("page opens Main and Review sessions separately", async () => {
   dispose();
 });
 
+test("page explicitly moves the selected review card to Done", async () => {
+  const host = createFakeHost();
+  const store = createBoardStore(host.storage);
+  await store.createProject("project-a", 1);
+  const card = await store.createCard("project-a", { title: "Reviewed card", prompt: "P" });
+  await store.beginSessionStart(card.id, { role: "main", requestId: "main-request" });
+  await store.completeSessionStart(card.id, {
+    role: "main",
+    requestId: "main-request",
+    sessionId: "main-1",
+    linked: true,
+    directory: "/worktrees/reviewed-card",
+    targetStatus: "in_progress",
+  });
+  await store.beginSessionStart(card.id, { role: "review", requestId: "review-request" });
+  await store.completeSessionStart(card.id, {
+    role: "review",
+    requestId: "review-request",
+    sessionId: "review-1",
+    linked: true,
+    targetStatus: "needs_review",
+  });
+  const ui = createFakeUiKit();
+  const dispose = await bootstrapPage(createHostAdapter(host.client), createPageSurface(ui));
+
+  host.emitReady({ locale: "en" } as HostReadyContext);
+  host.emitProjects({ kind: "projects", state: "ready", projects: [{ id: "project-a", name: "A", directory: "/a" }] });
+  await Bun.sleep(1);
+  await Bun.sleep(1);
+  ui.selectCard(card.id);
+
+  expect(ui.visibleText("moveDone")).toBe("Move to Done");
+  expect(ui.isDisabled("moveDone")).toBe(false);
+  ui.click("moveDone");
+  await Bun.sleep(1);
+  await Bun.sleep(1);
+
+  const board = await store.loadBoard("project-a");
+  expect(board.needs_review).toEqual([]);
+  expect(board.done.map(({ id }) => id)).toEqual([card.id]);
+  expect(ui.visibleText("doneCards")).toBe("Reviewed card");
+  dispose();
+});
+
 test("read-only lease state disables Start actions before any click", () => {
   const ui = createFakeUiKit();
   const page = createPageSurface(ui);

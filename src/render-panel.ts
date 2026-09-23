@@ -71,6 +71,7 @@ type MessageKey =
   | "done"
   | "inProgress"
   | "limit"
+  | "moveDone"
   | "needsReview"
   | "newCard"
   | "noProject"
@@ -95,6 +96,7 @@ const messages: Record<"en" | "zh-CN", Record<MessageKey, string>> = {
     done: "Done",
     inProgress: "In progress",
     limit: "Limit",
+    moveDone: "Move to Done",
     needsReview: "Needs review",
     newCard: "New card",
     noProject: "Open a project to see its board.",
@@ -118,6 +120,7 @@ const messages: Record<"en" | "zh-CN", Record<MessageKey, string>> = {
     done: "已完成",
     inProgress: "处理中",
     limit: "上限",
+    moveDone: "移至已完成",
     needsReview: "待审查",
     newCard: "新建卡片",
     noProject: "打开项目以查看看板。",

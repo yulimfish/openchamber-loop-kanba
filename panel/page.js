@@ -2286,6 +2286,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       done: "Done",
       inProgress: "In progress",
       limit: "Limit",
+      moveDone: "Move to Done",
       needsReview: "Needs review",
       newCard: "New card",
       noProject: "Open a project to see its board.",
@@ -2309,6 +2310,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       done: "已完成",
       inProgress: "处理中",
       limit: "上限",
+      moveDone: "移至已完成",
       needsReview: "待审查",
       newCard: "新建卡片",
       noProject: "打开项目以查看看板。",
@@ -2353,6 +2355,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
     let newCard;
     let startMain;
     let startReview;
+    let moveDone;
     let openMain;
     let openReview;
     let adoptSession;
@@ -2387,6 +2390,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
       const pending = selected?.pendingStartRole != null;
       startMain?.update({ label: label("startMain"), disabled: !state.canStart || pending || selected?.status !== "todo" || !state.onStartMain });
       startReview?.update({ label: label("startReview"), disabled: !state.canStart || pending || selected?.status !== "in_progress" || !state.onStartReview });
+      moveDone?.update({ label: label("moveDone"), disabled: !state.canStart || pending || selected?.status !== "needs_review" || !state.onMoveDone });
       openMain?.update({ label: label("openMain"), disabled: !selected?.mainSessionId || !state.onOpenMain });
       openReview?.update({ label: label("openReview"), disabled: !selected?.reviewSessionId || !state.onOpenReview });
       adoptSession?.update({ label: label("adoptSession"), disabled: !state.canStart || !selected?.pendingStartRole || !state.onAdoptSession });
@@ -2426,6 +2430,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         newCard = ui.mountButton(ui.createSlot(toolbar, "newCard"), { label: "", onClick: () => state.onNewCard?.(draft) });
         startMain = ui.mountButton(ui.createSlot(toolbar, "startMain"), { label: "", onClick: () => selectedCardId && state.onStartMain?.(selectedCardId) });
         startReview = ui.mountButton(ui.createSlot(toolbar, "startReview"), { label: "", onClick: () => selectedCardId && state.onStartReview?.(selectedCardId) });
+        moveDone = ui.mountButton(ui.createSlot(toolbar, "moveDone"), { label: "", onClick: () => selectedCardId && state.onMoveDone?.(selectedCardId) });
         openMain = ui.mountButton(ui.createSlot(toolbar, "openMain"), { label: "", onClick: () => {
           const sessionId = state.cards.find((card) => card.id === selectedCardId)?.mainSessionId;
           if (sessionId)
@@ -2454,7 +2459,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
           columns.set(status, { heading, list });
           handles.push(heading, list);
         }
-        handles.push(empty, automationBanner, banner, project, active2, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
+        handles.push(empty, automationBanner, banner, project, active2, newCard, startMain, startReview, moveDone, openMain, openReview, adoptSession, clearPending, title, prompt);
         render();
       },
       applyReady: (context) => {
@@ -2730,6 +2735,7 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         onNewCard: board && canStart ? (draft) => void createCard(draft) : undefined,
         onStartMain: board && canStart ? (cardId) => void startSession(cardId, "main") : undefined,
         onStartReview: board && canStart ? (cardId) => void startSession(cardId, "review") : undefined,
+        onMoveDone: board && canStart ? (cardId) => void moveCardToDone(cardId) : undefined,
         onAdoptSession: board && canStart ? (cardId) => void recoverSession(cardId, "adopt") : undefined,
         onClearPending: board && canStart ? (cardId) => void recoverSession(cardId, "clear") : undefined,
         onOpenMain: (sessionId) => void host.openSession(sessionId),
@@ -2809,6 +2815,26 @@ textarea.oc-sdk-input { height: auto; padding: 8px 12px; resize: vertical; }
         board = nextBoard;
         error = null;
         renderer.setDraft({ title: "", prompt: "" });
+        render();
+      } catch (nextError) {
+        if (disposed || generation !== projectGeneration)
+          return;
+        error = errorMessage(nextError);
+        render();
+      }
+    }
+    async function moveCardToDone(cardId) {
+      const projectId = activeProjectId;
+      const generation = projectGeneration;
+      if (!projectId)
+        return;
+      try {
+        await boardStore.moveCard(cardId, "done", "user");
+        const nextBoard = await boardStore.loadBoard(projectId);
+        if (disposed || generation !== projectGeneration)
+          return;
+        board = nextBoard;
+        error = null;
         render();
       } catch (nextError) {
         if (disposed || generation !== projectGeneration)

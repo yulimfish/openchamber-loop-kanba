@@ -32,6 +32,7 @@ export interface PageSurfaceState {
   onNewCard?: (draft: PageDraft) => void;
   onStartMain?: (cardId: string) => void;
   onStartReview?: (cardId: string) => void;
+  onMoveDone?: (cardId: string) => void;
   onAdoptSession?: (cardId: string) => void;
   onClearPending?: (cardId: string) => void;
   onOpenMain?: (sessionId: string) => void;
@@ -74,6 +75,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
   let newCard: Handle<ButtonProps> | undefined;
   let startMain: Handle<ButtonProps> | undefined;
   let startReview: Handle<ButtonProps> | undefined;
+  let moveDone: Handle<ButtonProps> | undefined;
   let openMain: Handle<ButtonProps> | undefined;
   let openReview: Handle<ButtonProps> | undefined;
   let adoptSession: Handle<ButtonProps> | undefined;
@@ -110,6 +112,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
     const pending = selected?.pendingStartRole != null;
     startMain?.update({ label: label("startMain"), disabled: !state.canStart || pending || selected?.status !== "todo" || !state.onStartMain });
     startReview?.update({ label: label("startReview"), disabled: !state.canStart || pending || selected?.status !== "in_progress" || !state.onStartReview });
+    moveDone?.update({ label: label("moveDone"), disabled: !state.canStart || pending || selected?.status !== "needs_review" || !state.onMoveDone });
     openMain?.update({ label: label("openMain"), disabled: !selected?.mainSessionId || !state.onOpenMain });
     openReview?.update({ label: label("openReview"), disabled: !selected?.reviewSessionId || !state.onOpenReview });
     adoptSession?.update({ label: label("adoptSession"), disabled: !state.canStart || !selected?.pendingStartRole || !state.onAdoptSession });
@@ -149,6 +152,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
       newCard = ui.mountButton(ui.createSlot(toolbar, "newCard"), { label: "", onClick: () => state.onNewCard?.(draft) });
       startMain = ui.mountButton(ui.createSlot(toolbar, "startMain"), { label: "", onClick: () => selectedCardId && state.onStartMain?.(selectedCardId) });
       startReview = ui.mountButton(ui.createSlot(toolbar, "startReview"), { label: "", onClick: () => selectedCardId && state.onStartReview?.(selectedCardId) });
+      moveDone = ui.mountButton(ui.createSlot(toolbar, "moveDone"), { label: "", onClick: () => selectedCardId && state.onMoveDone?.(selectedCardId) });
       openMain = ui.mountButton(ui.createSlot(toolbar, "openMain"), { label: "", onClick: () => {
         const sessionId = state.cards.find((card) => card.id === selectedCardId)?.mainSessionId;
         if (sessionId) state.onOpenMain?.(sessionId);
@@ -171,7 +175,7 @@ export const createPageSurface = (ui: UiKit): PageSurface => {
         columns.set(status, { heading, list });
         handles.push(heading, list);
       }
-      handles.push(empty, automationBanner, banner, project, active, newCard, startMain, startReview, openMain, openReview, adoptSession, clearPending, title, prompt);
+      handles.push(empty, automationBanner, banner, project, active, newCard, startMain, startReview, moveDone, openMain, openReview, adoptSession, clearPending, title, prompt);
       render();
     },
     applyReady: (context) => {

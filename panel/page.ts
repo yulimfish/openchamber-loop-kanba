@@ -63,6 +63,7 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
       onNewCard: board && canStart ? (draft) => void createCard(draft) : undefined,
       onStartMain: board && canStart ? (cardId) => void startSession(cardId, "main") : undefined,
       onStartReview: board && canStart ? (cardId) => void startSession(cardId, "review") : undefined,
+      onMoveDone: board && canStart ? (cardId) => void moveCardToDone(cardId) : undefined,
       onAdoptSession: board && canStart ? (cardId) => void recoverSession(cardId, "adopt") : undefined,
       onClearPending: board && canStart ? (cardId) => void recoverSession(cardId, "clear") : undefined,
       onOpenMain: (sessionId) => void host.openSession(sessionId),
@@ -135,6 +136,24 @@ export const bootstrapPage = async (host: HostAdapter, renderer: PageSurface) =>
       board = nextBoard;
       error = null;
       renderer.setDraft({ title: "", prompt: "" });
+      render();
+    } catch (nextError) {
+      if (disposed || generation !== projectGeneration) return;
+      error = errorMessage(nextError);
+      render();
+    }
+  }
+
+  async function moveCardToDone(cardId: string): Promise<void> {
+    const projectId = activeProjectId;
+    const generation = projectGeneration;
+    if (!projectId) return;
+    try {
+      await boardStore.moveCard(cardId, "done", "user");
+      const nextBoard = await boardStore.loadBoard(projectId);
+      if (disposed || generation !== projectGeneration) return;
+      board = nextBoard;
+      error = null;
       render();
     } catch (nextError) {
       if (disposed || generation !== projectGeneration) return;

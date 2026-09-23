@@ -84,7 +84,7 @@ test("actual Host completion events leave persisted card status unchanged", asyn
   expect((await fixture.store.getCard(fixture.card.id)).status).toBe("in_progress");
 });
 
-test("production sources never register onSessionLifecycle or transition from subscriptions", async () => {
+test("session subscriptions never transition cards automatically", async () => {
   const sources = await Promise.all([
     Bun.file("src/session-workflow.ts").text(),
     Bun.file("src/render-page.ts").text(),
@@ -95,7 +95,8 @@ test("production sources never register onSessionLifecycle or transition from su
     Bun.file("src/host-adapter.ts").text(),
   ]);
   const source = sources.join("\n");
+  const workflowSource = sources[0]!;
 
   expect(source).not.toContain("onSessionLifecycle");
-  expect(source).not.toMatch(/\.moveCard\(/);
+  expect(workflowSource).not.toMatch(/\.moveCard\(/);
 });
